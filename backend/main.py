@@ -1,21 +1,23 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
+import uvicorn
 
-from backend.database import engine
-from backend.models import Base
-from backend.claim_routes import router as claim_router
-from backend.dashboard_routes import router as dashboard_router
-from backend.auth import router as auth_router
+app = FastAPI()
 
-app = FastAPI(title="Insurance Claim Management Platform")
-
-# Create DB tables
-Base.metadata.create_all(bind=engine)
-
-# Register routes
-app.include_router(auth_router)
-app.include_router(claim_router)
-app.include_router(dashboard_router)
+print("✅ Server starting on http://localhost:8000")
 
 @app.get("/")
-def root():
-    return {"status": "Backend running successfully"}
+def home():
+    return {"message": "Insurance Claims API"}
+
+@app.get("/dashboard/stats")
+def stats():
+    return {
+        "total_claims": 250,
+        "today_claims": 8,
+        "pending_review": 15,
+        "fraud_probability": 0.38
+    }
+
+# This keeps the server running
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
