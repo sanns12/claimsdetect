@@ -2,82 +2,85 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
-import { FiSearch, FiFilter, FiDownload, FiEye, FiArrowLeft } from 'react-icons/fi';
+import { 
+  FiSearch, 
+  FiFilter, 
+  FiDownload, 
+  FiEye, 
+  FiArrowLeft,
+  FiTrash2,
+  FiAlertCircle,
+  FiCheckCircle
+} from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
 
 export default function UserClaimList() {
   const location = useLocation();
   const successMessage = location.state?.message;
-  const newClaimId = location.state?.newClaimId;
-  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
-  const [claims] = useState(() => {
-    // Get claims from localStorage
+  const [claims, setClaims] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [claimToDelete, setClaimToDelete] = useState(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+
+  const loadClaims = () => {
     const storedClaims = JSON.parse(localStorage.getItem('userClaims') || '[]');
     
-    // If no claims in localStorage, use mock data as fallback
-    if (storedClaims.length === 0) {
-      const mockClaims = [
-        { 
-          id: 'CLM001', 
-          date: '2024-03-15', 
-          amount: '$5,200', 
-          status: CLAIM_STATUS.APPROVED, 
-          risk: 23,
-          disease: 'Cardiovascular',
-          hospital: 'City General Hospital'
-        },
-        { 
-          id: 'CLM002', 
-          date: '2024-03-14', 
-          amount: '$12,500', 
-          status: CLAIM_STATUS.AI_PROCESSING, 
-          risk: 67,
-          disease: 'Orthopedic',
-          hospital: 'St. Mary\'s Medical'
-        },
-        { 
-          id: 'CLM003', 
-          date: '2024-03-13', 
-          amount: '$3,800', 
-          status: CLAIM_STATUS.FLAGGED, 
-          risk: 82,
-          disease: 'Respiratory',
-          hospital: 'Community Health Center'
-        },
-        { 
-          id: 'CLM004', 
-          date: '2024-03-12', 
-          amount: '$8,900', 
-          status: CLAIM_STATUS.SUBMITTED, 
-          risk: 45,
-          disease: 'Gastrointestinal',
-          hospital: 'University Hospital'
-        },
-        { 
-          id: 'CLM005', 
-          date: '2024-03-11', 
-          amount: '$15,200', 
-          status: CLAIM_STATUS.APPROVED, 
-          risk: 18,
-          disease: 'Neurological',
-          hospital: 'Neurocare Center'
-        }
-      ];
-      // Save mock claims to localStorage for persistence
-      localStorage.setItem('userClaims', JSON.stringify(mockClaims));
-      return mockClaims;
-    }
-    
-    return storedClaims;
-  });
-  const [loading] = useState(false);
+    setTimeout(() => {
+      if (storedClaims.length === 0) {
+        const mockClaims = [
+          { 
+            id: 'CLM001', 
+            date: '2024-03-15', 
+            amount: '$5,200', 
+            status: CLAIM_STATUS.APPROVED, 
+            risk: 23,
+            disease: 'Cardiovascular',
+            hospital: 'City General Hospital'
+          },
+          { 
+            id: 'CLM002', 
+            date: '2024-03-14', 
+            amount: '$12,500', 
+            status: CLAIM_STATUS.AI_PROCESSING, 
+            risk: 67,
+            disease: 'Orthopedic',
+            hospital: 'St. Mary\'s Medical'
+          },
+          { 
+            id: 'CLM003', 
+            date: '2024-03-13', 
+            amount: '$3,800', 
+            status: CLAIM_STATUS.FLAGGED, 
+            risk: 82,
+            disease: 'Respiratory',
+            hospital: 'Community Health Center'
+          },
+          { 
+            id: 'CLM004', 
+            date: '2024-03-12', 
+            amount: '$8,900', 
+            status: CLAIM_STATUS.SUBMITTED, 
+            risk: 45,
+            disease: 'Gastrointestinal',
+            hospital: 'University Hospital'
+          }
+        ];
+        setClaims(mockClaims);
+        localStorage.setItem('userClaims', JSON.stringify(mockClaims));
+      } else {
+        setClaims(storedClaims);
+      }
+      setLoading(false);
+    }, 500);
+  };
 
-  // Mark loading as complete after initial render
+  // Load claims from localStorage on component mount
   useEffect(() => {
-    // Component is already mounted with claims loaded
+    loadClaims();
   }, []);
 
   // Filter claims based on search and filters
@@ -88,21 +91,84 @@ export default function UserClaimList() {
       (claim.hospital && claim.hospital.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || claim.status === statusFilter;
-    
     const matchesDate = !dateFilter || claim.date === dateFilter;
     
     return matchesSearch && matchesStatus && matchesDate;
   });
 
-  // Highlight new claim if just submitted
-  const isNewClaim = (claimId) => {
-    return newClaimId === claimId;
+  const handleDeleteClick = (claim) => {
+    setClaimToDelete(claim);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (!claimToDelete) return;
+    
+    setDeleteInProgress(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      // Remove claim from array
+      const updatedClaims = claims.filter(c => c.id !== claimToDelete.id);
+      
+      // Update localStorage
+      localStorage.setItem('userClaims', JSON.stringify(updatedClaims));
+      
+      // Update state
+      setClaims(updatedClaims);
+      
+      // Close modal
+      setShowDeleteModal(false);
+      setClaimToDelete(null);
+      setDeleteInProgress(false);
+    }, 1000);
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setClaimToDelete(null);
   };
 
   return (
     <div className="min-h-screen bg-background text-white">
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface rounded-xl border border-gray-800 max-w-md w-full p-6">
+            <div className="flex items-center gap-3 text-danger mb-4">
+              <FiAlertCircle className="text-3xl" />
+              <h2 className="text-xl font-bold">Delete Claim</h2>
+            </div>
+            
+            <p className="text-textSecondary mb-2">
+              Are you sure you want to delete claim <span className="font-mono text-primary">{claimToDelete?.id}</span>?
+            </p>
+            <p className="text-sm text-textSecondary mb-6">
+              This action cannot be undone. All documents associated with this claim will be permanently removed.
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <Button 
+                variant="secondary" 
+                onClick={cancelDelete}
+                disabled={deleteInProgress}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="danger"
+                onClick={confirmDelete}
+                disabled={deleteInProgress}
+              >
+                {deleteInProgress ? 'Deleting...' : 'Delete Permanently'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50">
+      <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-40">
         <div className="px-6 py-4 flex items-center gap-4">
           <Link 
             to="/user/dashboard" 
@@ -117,7 +183,8 @@ export default function UserClaimList() {
       {/* Success Message */}
       {successMessage && (
         <div className="px-6 pt-6">
-          <div className="bg-success/10 border border-success/30 text-success px-4 py-3 rounded-lg animate-pulse">
+          <div className="bg-success/10 border border-success/30 text-success px-4 py-3 rounded-lg flex items-center gap-3">
+            <FiCheckCircle />
             {successMessage}
           </div>
         </div>
@@ -225,7 +292,7 @@ export default function UserClaimList() {
                     <th className="px-6 py-4">Amount</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4">Risk Score</th>
-                    <th className="px-6 py-4">Action</th>
+                    <th className="px-6 py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
@@ -233,9 +300,7 @@ export default function UserClaimList() {
                     filteredClaims.map((claim) => (
                       <tr 
                         key={claim.id} 
-                        className={`hover:bg-surface/80 transition-colors ${
-                          isNewClaim(claim.id) ? 'bg-primary/5 border-l-4 border-l-primary' : ''
-                        }`}
+                        className="hover:bg-surface/80 transition-colors"
                       >
                         <td className="px-6 py-4 font-mono">{claim.id}</td>
                         <td className="px-6 py-4 text-textSecondary">{claim.date}</td>
@@ -265,20 +330,29 @@ export default function UserClaimList() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <Link 
-                            to={`/user/claims/${claim.id}`}
-                            className="flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <FiEye />
-                            <span className="text-sm">View</span>
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Link 
+                              to={`/user/claims/${claim.id}`}
+                              className="p-2 hover:bg-primary/20 rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <FiEye className="text-primary" />
+                            </Link>
+                            <button 
+                              onClick={() => handleDeleteClick(claim)}
+                              className="p-2 hover:bg-danger/20 rounded-lg transition-colors"
+                              title="Delete Claim"
+                            >
+                              <FiTrash2 className="text-danger" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
                       <td colSpan="8" className="px-6 py-12 text-center">
-                        <div className="text-textSecondary mb-4">No claims found matching your filters</div>
+                        <div className="text-textSecondary mb-4">No claims found</div>
                         <Link to="/user/submit-claim">
                           <Button>Submit Your First Claim</Button>
                         </Link>
@@ -289,7 +363,7 @@ export default function UserClaimList() {
               </table>
             </div>
 
-            {/* Pagination (if needed) */}
+            {/* Pagination */}
             {filteredClaims.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-800 flex items-center justify-between">
                 <p className="text-sm text-textSecondary">
@@ -301,6 +375,12 @@ export default function UserClaimList() {
                   </button>
                   <button className="px-3 py-1 bg-primary rounded-lg hover:bg-primary/90 transition-colors">
                     1
+                  </button>
+                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
+                    2
+                  </button>
+                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
+                    3
                   </button>
                   <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
                     Next

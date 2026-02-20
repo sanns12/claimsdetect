@@ -15,39 +15,34 @@ import {
   FiClock,
   FiAlertCircle,
   FiCheckCircle,
-  FiXCircle,
   FiRefreshCw,
   FiFileText,
   FiPrinter,
-  FiBarChart2,
-  FiChevronDown,
-  FiShield,
-  FiFlag,
-  FiTrendingUp
+  FiTrash2
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
 
-export default function InsuranceClaimsList() {
+export default function HospitalClaimsList() {
   const location = useLocation();
   const successMessage = location.state?.message;
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedClaims, setSelectedClaims] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'flagged', 'fraud', 'pending'
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [claimToDelete, setClaimToDelete] = useState(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
-    riskLevel: 'all',
-    company: 'all',
+    department: 'all',
     dateRange: 'all',
-    amountRange: 'all',
+    riskLevel: 'all',
+    insuranceProvider: 'all',
     startDate: '',
-    endDate: '',
-    minAmount: '',
-    maxAmount: ''
+    endDate: ''
   });
 
   // Sorting state
@@ -57,180 +52,182 @@ export default function InsuranceClaimsList() {
   });
 
   // Mock data - would come from API
-  const [claims] = useState([
+  const [claims, setClaims] = useState([
     { 
-      id: 'CLM2345',
+      id: 'HCL001', 
+      patientId: 'P100234',
       patientName: 'Sarah Johnson',
-      hospital: 'City General Hospital',
-      date: '2024-03-20',
-      amount: 15200,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 94,
-      fraudScore: 0.92,
-      flags: ['Pattern Match', 'Amount Anomaly'],
-      department: 'Cardiology',
-      insuranceProvider: 'Blue Cross',
-      assignedTo: 'John Smith',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2346',
-      patientName: 'Michael Chen',
-      hospital: 'MediCare Plus Clinic',
-      date: '2024-03-20',
-      amount: 12500,
-      status: CLAIM_STATUS.FLAGGED,
-      risk: 76,
-      fraudScore: 0.78,
-      flags: ['Amount Anomaly'],
-      department: 'Orthopedics',
-      insuranceProvider: 'Aetna',
-      assignedTo: 'Jane Doe',
-      priority: 'high'
-    },
-    { 
-      id: 'CLM2347',
-      patientName: 'Emily Rodriguez',
-      hospital: 'HealthFirst Medical',
-      date: '2024-03-19',
-      amount: 3800,
-      status: CLAIM_STATUS.APPROVED,
-      risk: 24,
-      fraudScore: 0.12,
-      flags: [],
-      department: 'Emergency',
-      insuranceProvider: 'Cigna',
-      assignedTo: 'John Smith',
-      priority: 'normal'
-    },
-    { 
-      id: 'CLM2348',
-      patientName: 'David Kim',
-      hospital: 'QuickCare Center',
-      date: '2024-03-19',
-      amount: 28900,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 88,
-      fraudScore: 0.89,
-      flags: ['Pattern Match', 'Hospital History', 'Amount Anomaly'],
-      department: 'Oncology',
-      insuranceProvider: 'UnitedHealth',
-      assignedTo: 'Jane Doe',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2349',
-      patientName: 'Lisa Thompson',
-      hospital: 'Premier Health Group',
-      date: '2024-03-18',
-      amount: 8200,
-      status: CLAIM_STATUS.MANUAL_REVIEW,
-      risk: 62,
-      fraudScore: 0.58,
-      flags: ['Hospital History'],
-      department: 'Neurology',
-      insuranceProvider: 'Blue Cross',
-      assignedTo: 'Unassigned',
-      priority: 'medium'
-    },
-    { 
-      id: 'CLM2350',
-      patientName: 'James Wilson',
-      hospital: 'City General Hospital',
-      date: '2024-03-18',
-      amount: 45600,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 96,
-      fraudScore: 0.95,
-      flags: ['Pattern Match', 'Amount Anomaly', 'Duplicate'],
-      department: 'Cardiology',
-      insuranceProvider: 'Aetna',
-      assignedTo: 'John Smith',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2351',
-      patientName: 'Maria Garcia',
-      hospital: 'MediCare Plus Clinic',
-      date: '2024-03-17',
-      amount: 5300,
-      status: CLAIM_STATUS.SUBMITTED,
+      age: 45,
+      gender: 'Female',
+      date: '2024-03-20', 
+      amount: 5200, 
+      status: CLAIM_STATUS.SUBMITTED, 
       risk: 32,
-      fraudScore: 0.28,
-      flags: [],
-      department: 'Pediatrics',
-      insuranceProvider: 'Cigna',
-      assignedTo: 'Unassigned',
-      priority: 'normal'
+      department: 'Cardiology',
+      diagnosis: 'Cardiovascular Disease',
+      doctor: 'Dr. Williams',
+      insuranceProvider: 'Blue Cross',
+      policyNumber: 'BC-789012',
+      admissionDate: '2024-03-15',
+      dischargeDate: '2024-03-18',
+      documents: 3,
+      priority: 'normal',
+      submittedBy: 'Dr. Williams',
+      submittedAt: '2024-03-20T10:30:00',
+      lastUpdated: '2024-03-20T14:25:00'
     },
     { 
-      id: 'CLM2352',
-      patientName: 'Robert Brown',
-      hospital: 'HealthFirst Medical',
-      date: '2024-03-17',
-      amount: 12700,
-      status: CLAIM_STATUS.FLAGGED,
-      risk: 68,
-      fraudScore: 0.65,
-      flags: ['Amount Anomaly'],
-      department: 'General Medicine',
+      id: 'HCL002', 
+      patientId: 'P100567',
+      patientName: 'Michael Chen',
+      age: 62,
+      gender: 'Male',
+      date: '2024-03-20', 
+      amount: 12500, 
+      status: CLAIM_STATUS.AI_PROCESSING, 
+      risk: 58,
+      department: 'Orthopedics',
+      diagnosis: 'Fracture',
+      doctor: 'Dr. Rodriguez',
+      insuranceProvider: 'Aetna',
+      policyNumber: 'AE-456123',
+      admissionDate: '2024-03-10',
+      dischargeDate: '2024-03-19',
+      documents: 5,
+      priority: 'high',
+      submittedBy: 'Dr. Rodriguez',
+      submittedAt: '2024-03-20T09:15:00',
+      lastUpdated: '2024-03-20T15:30:00'
+    },
+    { 
+      id: 'HCL003', 
+      patientId: 'P100789',
+      patientName: 'Emily Rodriguez',
+      age: 34,
+      gender: 'Female',
+      date: '2024-03-19', 
+      amount: 3800, 
+      status: CLAIM_STATUS.FLAGGED, 
+      risk: 76,
+      department: 'Emergency',
+      diagnosis: 'Respiratory Infection',
+      doctor: 'Dr. Thompson',
+      insuranceProvider: 'Cigna',
+      policyNumber: 'CG-345678',
+      admissionDate: '2024-03-18',
+      dischargeDate: '2024-03-19',
+      documents: 2,
+      priority: 'urgent',
+      submittedBy: 'Dr. Thompson',
+      submittedAt: '2024-03-19T16:45:00',
+      lastUpdated: '2024-03-20T09:00:00'
+    },
+    { 
+      id: 'HCL004', 
+      patientId: 'P100345',
+      patientName: 'David Kim',
+      age: 51,
+      gender: 'Male',
+      date: '2024-03-19', 
+      amount: 8900, 
+      status: CLAIM_STATUS.APPROVED, 
+      risk: 24,
+      department: 'Neurology',
+      diagnosis: 'Stroke',
+      doctor: 'Dr. Patel',
       insuranceProvider: 'UnitedHealth',
-      assignedTo: 'Jane Doe',
-      priority: 'high'
+      policyNumber: 'UH-901234',
+      admissionDate: '2024-03-05',
+      dischargeDate: '2024-03-15',
+      documents: 7,
+      priority: 'normal',
+      submittedBy: 'Dr. Patel',
+      submittedAt: '2024-03-19T11:20:00',
+      lastUpdated: '2024-03-20T10:15:00'
+    },
+    { 
+      id: 'HCL005', 
+      patientId: 'P100901',
+      patientName: 'Lisa Thompson',
+      age: 28,
+      gender: 'Female',
+      date: '2024-03-18', 
+      amount: 15200, 
+      status: CLAIM_STATUS.MANUAL_REVIEW, 
+      risk: 62,
+      department: 'Oncology',
+      diagnosis: 'Cancer',
+      doctor: 'Dr. Chen',
+      insuranceProvider: 'Blue Cross',
+      policyNumber: 'BC-567890',
+      admissionDate: '2024-03-01',
+      dischargeDate: '2024-03-17',
+      documents: 9,
+      priority: 'high',
+      submittedBy: 'Dr. Chen',
+      submittedAt: '2024-03-18T14:30:00',
+      lastUpdated: '2024-03-19T16:20:00'
     }
   ]);
 
-  // Companies list for filter
-  const companies = [
+  // Department options
+  const departments = [
     'all',
-    'City General Hospital',
-    'MediCare Plus Clinic',
-    'HealthFirst Medical',
-    'QuickCare Center',
-    'Premier Health Group'
+    'Cardiology',
+    'Orthopedics',
+    'Emergency',
+    'Neurology',
+    'Oncology',
+    'Pediatrics',
+    'General Medicine',
+    'Surgery',
+    'ICU'
+  ];
+
+  // Insurance providers
+  const insuranceProviders = [
+    'all',
+    'Blue Cross',
+    'Aetna',
+    'Cigna',
+    'UnitedHealth',
+    'Medicare',
+    'Medicaid'
   ];
 
   // Load claims on mount
   useEffect(() => {
+    // In a real app, fetch from API
+    // For now, load from localStorage or use mock data
+    const storedClaims = JSON.parse(localStorage.getItem('hospitalClaims') || '[]');
     setTimeout(() => {
+      if (storedClaims.length > 0) {
+        setClaims(storedClaims);
+      }
       setLoading(false);
     }, 1000);
   }, []);
 
-  // Filter claims based on view mode and filters
+  // Filter claims based on all criteria
   const filteredClaims = claims.filter(claim => {
-    // View mode filter
-    if (viewMode === 'flagged' && claim.status !== CLAIM_STATUS.FLAGGED) return false;
-    if (viewMode === 'fraud' && claim.status !== CLAIM_STATUS.FRAUD) return false;
-    if (viewMode === 'pending' && ![CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING, CLAIM_STATUS.MANUAL_REVIEW].includes(claim.status)) return false;
-
-    // Search filter
     const matchesSearch = filters.search === '' || 
       claim.id.toLowerCase().includes(filters.search.toLowerCase()) ||
       claim.patientName.toLowerCase().includes(filters.search.toLowerCase()) ||
-      claim.hospital.toLowerCase().includes(filters.search.toLowerCase());
+      claim.patientId.toLowerCase().includes(filters.search.toLowerCase()) ||
+      claim.doctor.toLowerCase().includes(filters.search.toLowerCase());
 
-    // Status filter
     const matchesStatus = filters.status === 'all' || claim.status === filters.status;
+    const matchesDepartment = filters.department === 'all' || claim.department === filters.department;
 
-    // Risk level filter
     const matchesRisk = filters.riskLevel === 'all' || 
       (filters.riskLevel === 'low' && claim.risk <= 30) ||
       (filters.riskLevel === 'medium' && claim.risk > 30 && claim.risk <= 60) ||
       (filters.riskLevel === 'high' && claim.risk > 60 && claim.risk <= 80) ||
       (filters.riskLevel === 'critical' && claim.risk > 80);
 
-    // Company filter
-    const matchesCompany = filters.company === 'all' || claim.hospital === filters.company;
+    const matchesInsurance = filters.insuranceProvider === 'all' || 
+      claim.insuranceProvider === filters.insuranceProvider;
 
-    // Amount range filter
-    let matchesAmount = true;
-    if (filters.amountRange === 'under5k') matchesAmount = claim.amount < 5000;
-    else if (filters.amountRange === '5k-10k') matchesAmount = claim.amount >= 5000 && claim.amount <= 10000;
-    else if (filters.amountRange === '10k-25k') matchesAmount = claim.amount > 10000 && claim.amount <= 25000;
-    else if (filters.amountRange === 'over25k') matchesAmount = claim.amount > 25000;
-
-    // Date range filter
     let matchesDate = true;
     const claimDate = new Date(claim.date);
     const today = new Date();
@@ -243,10 +240,15 @@ export default function InsuranceClaimsList() {
     } else if (filters.dateRange === 'month') {
       const monthAgo = new Date(today.setMonth(today.getMonth() - 1));
       matchesDate = claimDate >= monthAgo;
+    } else if (filters.dateRange === 'custom') {
+      if (filters.startDate && filters.endDate) {
+        matchesDate = claimDate >= new Date(filters.startDate) && 
+                     claimDate <= new Date(filters.endDate);
+      }
     }
 
-    return matchesSearch && matchesStatus && matchesRisk && 
-           matchesCompany && matchesAmount && matchesDate;
+    return matchesSearch && matchesStatus && matchesDepartment && 
+           matchesRisk && matchesInsurance && matchesDate;
   });
 
   // Sort claims
@@ -254,7 +256,7 @@ export default function InsuranceClaimsList() {
     let aValue = a[sortConfig.key];
     let bValue = b[sortConfig.key];
 
-    if (sortConfig.key === 'amount' || sortConfig.key === 'risk' || sortConfig.key === 'fraudScore') {
+    if (sortConfig.key === 'amount' || sortConfig.key === 'risk') {
       aValue = Number(aValue);
       bValue = Number(bValue);
     }
@@ -272,12 +274,12 @@ export default function InsuranceClaimsList() {
   const stats = {
     total: filteredClaims.length,
     totalAmount: filteredClaims.reduce((sum, claim) => sum + claim.amount, 0),
-    fraudCount: filteredClaims.filter(c => c.status === CLAIM_STATUS.FRAUD).length,
-    flaggedCount: filteredClaims.filter(c => c.status === CLAIM_STATUS.FLAGGED).length,
-    pendingCount: filteredClaims.filter(c => 
+    pending: filteredClaims.filter(c => 
       [CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING, CLAIM_STATUS.MANUAL_REVIEW].includes(c.status)
     ).length,
-    avgRisk: Math.round(filteredClaims.reduce((sum, claim) => sum + claim.risk, 0) / filteredClaims.length) || 0
+    flagged: filteredClaims.filter(c => c.status === CLAIM_STATUS.FLAGGED).length,
+    fraud: filteredClaims.filter(c => c.status === CLAIM_STATUS.FRAUD).length,
+    approved: filteredClaims.filter(c => c.status === CLAIM_STATUS.APPROVED).length
   };
 
   const handleSort = (key) => {
@@ -307,22 +309,54 @@ export default function InsuranceClaimsList() {
     }
   };
 
-  const handleBulkAction = (action) => {
-    console.log(`Bulk ${action} for claims:`, selectedClaims);
+  const handleDeleteClick = (claim) => {
+    setClaimToDelete(claim);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = () => {
+    if (!claimToDelete) return;
+    
+    setDeleteInProgress(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      // Remove claim from array
+      const updatedClaims = claims.filter(c => c.id !== claimToDelete.id);
+      
+      // Update localStorage
+      localStorage.setItem('hospitalClaims', JSON.stringify(updatedClaims));
+      
+      // Update state
+      setClaims(updatedClaims);
+      
+      // Clear selection if needed
+      if (selectedClaims.includes(claimToDelete.id)) {
+        setSelectedClaims(prev => prev.filter(id => id !== claimToDelete.id));
+      }
+      
+      // Close modal
+      setShowDeleteModal(false);
+      setClaimToDelete(null);
+      setDeleteInProgress(false);
+    }, 1000);
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setClaimToDelete(null);
   };
 
   const clearFilters = () => {
     setFilters({
       search: '',
       status: 'all',
-      riskLevel: 'all',
-      company: 'all',
+      department: 'all',
       dateRange: 'all',
-      amountRange: 'all',
+      riskLevel: 'all',
+      insuranceProvider: 'all',
       startDate: '',
-      endDate: '',
-      minAmount: '',
-      maxAmount: ''
+      endDate: ''
     });
   };
 
@@ -335,21 +369,22 @@ export default function InsuranceClaimsList() {
     if (risk > 80) return 'text-danger';
     if (risk > 60) return 'text-orange-500';
     if (risk > 40) return 'text-warning';
+    if (risk > 20) return 'text-info';
     return 'text-success';
   };
 
   const exportToCSV = () => {
-    const headers = ['Claim ID', 'Patient', 'Hospital', 'Date', 'Amount', 'Status', 'Risk', 'Fraud Score', 'Flags'];
+    const headers = ['Claim ID', 'Patient', 'Date', 'Amount', 'Status', 'Risk', 'Department', 'Doctor', 'Insurance'];
     const csvData = filteredClaims.map(claim => [
       claim.id,
       claim.patientName,
-      claim.hospital,
       claim.date,
       claim.amount,
       claim.status,
       `${claim.risk}%`,
-      claim.fraudScore,
-      claim.flags.join('; ')
+      claim.department,
+      claim.doctor,
+      claim.insuranceProvider
     ]);
     
     const csv = [headers, ...csvData].map(row => row.join(',')).join('\n');
@@ -357,18 +392,57 @@ export default function InsuranceClaimsList() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `insurance-claims-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `hospital-claims-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
   };
 
   return (
     <div className="min-h-screen bg-background text-white">
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface rounded-xl border border-gray-800 max-w-md w-full p-6">
+            <div className="flex items-center gap-3 text-danger mb-4">
+              <FiAlertCircle className="text-3xl" />
+              <h2 className="text-xl font-bold">Delete Claim</h2>
+            </div>
+            
+            <p className="text-textSecondary mb-2">
+              Are you sure you want to delete claim <span className="font-mono text-primary">{claimToDelete?.id}</span>?
+            </p>
+            <p className="text-sm text-textSecondary mb-4">
+              Patient: <span className="text-white">{claimToDelete?.patientName}</span>
+            </p>
+            <p className="text-sm text-textSecondary mb-6">
+              This action cannot be undone. All documents associated with this claim will be permanently removed.
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <Button 
+                variant="secondary" 
+                onClick={cancelDelete}
+                disabled={deleteInProgress}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="danger"
+                onClick={confirmDelete}
+                disabled={deleteInProgress}
+              >
+                {deleteInProgress ? 'Deleting...' : 'Delete Permanently'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50">
+      <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-40">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
-              to="/insurance/dashboard" 
+              to="/hospital/dashboard" 
               className="p-2 hover:bg-surface rounded-lg transition-colors"
             >
               <FiArrowLeft className="text-xl" />
@@ -389,6 +463,9 @@ export default function InsuranceClaimsList() {
             >
               <FiFilter />
               Filters
+              {(filters.search || filters.status !== 'all' || filters.department !== 'all') && (
+                <span className="w-2 h-2 bg-primary rounded-full"></span>
+              )}
             </Button>
             
             <Button 
@@ -422,48 +499,6 @@ export default function InsuranceClaimsList() {
         </div>
       )}
 
-      {/* View Mode Tabs */}
-      <div className="px-6 pt-6">
-        <div className="flex gap-2 border-b border-gray-800">
-          <button
-            onClick={() => setViewMode('all')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'all' ? 'text-primary' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            All Claims
-            {viewMode === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('pending')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'pending' ? 'text-warning' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Pending Review
-            {viewMode === 'pending' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-warning"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('flagged')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'flagged' ? 'text-orange-500' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Flagged
-            {viewMode === 'flagged' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('fraud')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'fraud' ? 'text-danger' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Fraud Cases
-            {viewMode === 'fraud' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-danger"></div>}
-          </button>
-        </div>
-      </div>
-
       {/* Filters Panel */}
       {showFilters && (
         <div className="px-6 pt-6">
@@ -489,7 +524,7 @@ export default function InsuranceClaimsList() {
                   <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
                   <input
                     type="text"
-                    placeholder="ID, patient, hospital..."
+                    placeholder="ID, patient, doctor..."
                     value={filters.search}
                     onChange={(e) => setFilters({...filters, search: e.target.value})}
                     className="w-full bg-background border border-gray-800 rounded-lg py-2 pl-10 pr-4 focus:outline-none focus:border-primary"
@@ -512,33 +547,33 @@ export default function InsuranceClaimsList() {
                 </select>
               </div>
 
-              {/* Risk Level */}
+              {/* Department Filter */}
               <div>
-                <label className="block text-sm text-textSecondary mb-2">Risk Level</label>
+                <label className="block text-sm text-textSecondary mb-2">Department</label>
                 <select
-                  value={filters.riskLevel}
-                  onChange={(e) => setFilters({...filters, riskLevel: e.target.value})}
+                  value={filters.department}
+                  onChange={(e) => setFilters({...filters, department: e.target.value})}
                   className="w-full bg-background border border-gray-800 rounded-lg py-2 px-3 focus:outline-none focus:border-primary"
                 >
-                  <option value="all">All Risks</option>
-                  <option value="low">Low (0-30)</option>
-                  <option value="medium">Medium (31-60)</option>
-                  <option value="high">High (61-80)</option>
-                  <option value="critical">Critical (81-100)</option>
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>
+                      {dept === 'all' ? 'All Departments' : dept}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Company/Hospital */}
+              {/* Insurance Provider */}
               <div>
-                <label className="block text-sm text-textSecondary mb-2">Hospital</label>
+                <label className="block text-sm text-textSecondary mb-2">Insurance</label>
                 <select
-                  value={filters.company}
-                  onChange={(e) => setFilters({...filters, company: e.target.value})}
+                  value={filters.insuranceProvider}
+                  onChange={(e) => setFilters({...filters, insuranceProvider: e.target.value})}
                   className="w-full bg-background border border-gray-800 rounded-lg py-2 px-3 focus:outline-none focus:border-primary"
                 >
-                  {companies.map(company => (
-                    <option key={company} value={company}>
-                      {company === 'all' ? 'All Hospitals' : company}
+                  {insuranceProviders.map(provider => (
+                    <option key={provider} value={provider}>
+                      {provider === 'all' ? 'All Providers' : provider}
                     </option>
                   ))}
                 </select>
@@ -556,24 +591,71 @@ export default function InsuranceClaimsList() {
                   <option value="today">Today</option>
                   <option value="week">Last 7 Days</option>
                   <option value="month">Last 30 Days</option>
+                  <option value="custom">Custom Range</option>
                 </select>
               </div>
 
-              {/* Amount Range */}
+              {/* Custom Date Range */}
+              {filters.dateRange === 'custom' && (
+                <>
+                  <div>
+                    <label className="block text-sm text-textSecondary mb-2">Start Date</label>
+                    <input
+                      type="date"
+                      value={filters.startDate}
+                      onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                      className="w-full bg-background border border-gray-800 rounded-lg py-2 px-3 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-textSecondary mb-2">End Date</label>
+                    <input
+                      type="date"
+                      value={filters.endDate}
+                      onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                      className="w-full bg-background border border-gray-800 rounded-lg py-2 px-3 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Risk Level */}
               <div>
-                <label className="block text-sm text-textSecondary mb-2">Amount Range</label>
+                <label className="block text-sm text-textSecondary mb-2">Risk Level</label>
                 <select
-                  value={filters.amountRange}
-                  onChange={(e) => setFilters({...filters, amountRange: e.target.value})}
+                  value={filters.riskLevel}
+                  onChange={(e) => setFilters({...filters, riskLevel: e.target.value})}
                   className="w-full bg-background border border-gray-800 rounded-lg py-2 px-3 focus:outline-none focus:border-primary"
                 >
-                  <option value="all">All Amounts</option>
-                  <option value="under5k">Under $5,000</option>
-                  <option value="5k-10k">$5,000 - $10,000</option>
-                  <option value="10k-25k">$10,000 - $25,000</option>
-                  <option value="over25k">Over $25,000</option>
+                  <option value="all">All Risk Levels</option>
+                  <option value="low">Low (0-30)</option>
+                  <option value="medium">Medium (31-60)</option>
+                  <option value="high">High (61-80)</option>
+                  <option value="critical">Critical (81-100)</option>
                 </select>
               </div>
+            </div>
+
+            {/* Active Filters Display */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {filters.search && (
+                <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                  Search: {filters.search}
+                  <button onClick={() => setFilters({...filters, search: ''})}>×</button>
+                </span>
+              )}
+              {filters.status !== 'all' && (
+                <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                  Status: {filters.status}
+                  <button onClick={() => setFilters({...filters, status: 'all'})}>×</button>
+                </span>
+              )}
+              {filters.department !== 'all' && (
+                <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                  Dept: {filters.department}
+                  <button onClick={() => setFilters({...filters, department: 'all'})}>×</button>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -592,43 +674,18 @@ export default function InsuranceClaimsList() {
           </div>
           <div className="bg-surface/50 rounded-lg border border-gray-800 p-4">
             <p className="text-textSecondary text-sm">Pending</p>
-            <p className="text-2xl font-bold text-warning">{stats.pendingCount}</p>
+            <p className="text-2xl font-bold text-warning">{stats.pending}</p>
           </div>
           <div className="bg-surface/50 rounded-lg border border-gray-800 p-4">
             <p className="text-textSecondary text-sm">Flagged</p>
-            <p className="text-2xl font-bold text-orange-500">{stats.flaggedCount}</p>
+            <p className="text-2xl font-bold text-orange-500">{stats.flagged}</p>
           </div>
           <div className="bg-surface/50 rounded-lg border border-gray-800 p-4">
-            <p className="text-textSecondary text-sm">Fraud</p>
-            <p className="text-2xl font-bold text-danger">{stats.fraudCount}</p>
+            <p className="text-textSecondary text-sm">Approved</p>
+            <p className="text-2xl font-bold text-success">{stats.approved}</p>
           </div>
         </div>
       </div>
-
-      {/* Bulk Actions Bar */}
-      {selectedClaims.length > 0 && (
-        <div className="px-6 pt-4">
-          <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 flex items-center justify-between">
-            <span className="text-sm">
-              <span className="font-bold">{selectedClaims.length}</span> claims selected
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('approve')}>
-                Approve
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('flag')}>
-                Flag
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('fraud')}>
-                Mark Fraud
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setSelectedClaims([])}>
-                Clear
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content */}
       <main className="p-6">
@@ -657,7 +714,6 @@ export default function InsuranceClaimsList() {
                     <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleSort('patientName')}>
                       Patient {getSortIcon('patientName')}
                     </th>
-                    <th className="px-6 py-4">Hospital</th>
                     <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleSort('date')}>
                       Date {getSortIcon('date')}
                     </th>
@@ -668,8 +724,9 @@ export default function InsuranceClaimsList() {
                     <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleSort('risk')}>
                       Risk {getSortIcon('risk')}
                     </th>
-                    <th className="px-6 py-4">Fraud Score</th>
-                    <th className="px-6 py-4">Flags</th>
+                    <th className="px-6 py-4">Department</th>
+                    <th className="px-6 py-4">Doctor</th>
+                    <th className="px-6 py-4">Insurance</th>
                     <th className="px-6 py-4">Actions</th>
                   </tr>
                 </thead>
@@ -679,8 +736,6 @@ export default function InsuranceClaimsList() {
                       key={claim.id} 
                       className={`hover:bg-surface/80 transition-colors ${
                         selectedClaims.includes(claim.id) ? 'bg-primary/5' : ''
-                      } ${
-                        claim.priority === 'urgent' ? 'border-l-2 border-l-danger' : ''
                       }`}
                     >
                       <td className="px-6 py-4">
@@ -696,20 +751,17 @@ export default function InsuranceClaimsList() {
                         <div>
                           <div className="font-medium">{claim.patientName}</div>
                           <div className="text-xs text-textSecondary">
-                            {claim.department}
+                            {claim.patientId} • {claim.age}y • {claim.gender}
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <div>{claim.hospital}</div>
+                          <div>{claim.date}</div>
                           <div className="text-xs text-textSecondary">
-                            {claim.insuranceProvider}
+                            {new Date(claim.submittedAt).toLocaleTimeString()}
                           </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>{claim.date}</div>
                       </td>
                       <td className="px-6 py-4 font-medium">${claim.amount.toLocaleString()}</td>
                       <td className="px-6 py-4">
@@ -722,7 +774,8 @@ export default function InsuranceClaimsList() {
                               className={`h-2 rounded-full ${
                                 claim.risk > 80 ? 'bg-danger' :
                                 claim.risk > 60 ? 'bg-orange-500' :
-                                claim.risk > 40 ? 'bg-warning' : 'bg-success'
+                                claim.risk > 40 ? 'bg-warning' :
+                                claim.risk > 20 ? 'bg-info' : 'bg-success'
                               }`}
                               style={{ width: `${claim.risk}%` }}
                             ></div>
@@ -731,33 +784,40 @@ export default function InsuranceClaimsList() {
                             {claim.risk}%
                           </span>
                         </div>
+                        <div className="text-xs text-textSecondary mt-1">
+                          {claim.priority === 'urgent' && (
+                            <span className="text-danger">⚠ Urgent</span>
+                          )}
+                          {claim.priority === 'high' && (
+                            <span className="text-warning">↑ High priority</span>
+                          )}
+                        </div>
                       </td>
+                      <td className="px-6 py-4">{claim.department}</td>
+                      <td className="px-6 py-4">{claim.doctor}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          claim.fraudScore > 0.8 ? 'bg-danger/20 text-danger' :
-                          claim.fraudScore > 0.6 ? 'bg-warning/20 text-warning' :
-                          'bg-success/20 text-success'
-                        }`}>
-                          {(claim.fraudScore * 100).toFixed(0)}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {claim.flags.map((flag, idx) => (
-                            <span key={idx} className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
-                              {flag}
-                            </span>
-                          ))}
+                        <div>
+                          <div>{claim.insuranceProvider}</div>
+                          <div className="text-xs text-textSecondary">{claim.policyNumber}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Link 
-                          to={`/insurance/claims/${claim.id}`}
-                          className="p-2 hover:bg-primary/20 rounded-lg transition-colors inline-block"
-                          title="View Details"
-                        >
-                          <FiEye className="text-primary" />
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link 
+                            to={`/hospital/claims/${claim.id}`}
+                            className="p-2 hover:bg-primary/20 rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <FiEye className="text-primary" />
+                          </Link>
+                          <button 
+                            onClick={() => handleDeleteClick(claim)}
+                            className="p-2 hover:bg-danger/20 rounded-lg transition-colors"
+                            title="Delete Claim"
+                          >
+                            <FiTrash2 className="text-danger" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
