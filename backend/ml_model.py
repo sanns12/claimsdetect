@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 import joblib
 import pandas as pd
@@ -72,3 +73,24 @@ def train_model():
 
     print("\nModel saved successfully.")
     return model
+=======
+"""
+ML Model Stub
+This file will be implemented by ML teammate.
+DO NOT add logic here.
+"""
+
+def predict_fraud(claim_data: dict) -> dict:
+    """
+    Input: claim data as dict
+    Output example:
+    {
+        "fraud_probability": 0.12,
+        "prediction": "genuine"
+    }
+    """
+    return {
+        "fraud_probability": None,
+        "prediction": "unknown"
+    }
+>>>>>>> 6da8e07e73dcf8da0a590226f0184853142cc9bc
