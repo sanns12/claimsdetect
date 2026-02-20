@@ -1,0 +1,72 @@
+# 🚫 NEVER PUSH THESE - HUGE FILES
+*.csv
+*.xlsx
+*.xls
+*.pkl
+*.joblib
+*.h5
+*.keras
+*.parquet
+*.feather
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# 📁 Data folders - IGNORE COMPLETELY
+**/data/
+**/datasets/
+**/Data/
+**/Datasets/
+backend/data/
+data/
+raw_data/
+processed_data/
+
+# 📦 Model files - DON'T PUSH (they're too big)
+**/models/
+**/Models/
+backend/models/
+*.pkl
+*.joblib
+
+# 🐍 Python virtual environment
+venv/
+env/
+ENV/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# 📝 IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 🗑️ System files
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+# 🧪 Test files you don't need to share
+**/tests/
+**/test_*.py
+test_*.py
+
+# 🔑 Environment variables (if any)
+.env
+.env.local
+.env.*.local
+
+# 📄 Don't push these either
+.DS_Store
+*.ipynb_checkpoints
