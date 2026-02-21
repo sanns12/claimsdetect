@@ -1,4 +1,4 @@
-import { useState} from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
@@ -19,47 +19,130 @@ import {
   FiLogOut
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
+import { getHospitalDashboardStats } from '../../services/dashboard';
+import { getHospitalClaims } from '../../services/claims';
+import { getCurrentUser, logout } from '../../services/auth';
 
 export default function HospitalDashboard() {
   const navigate = useNavigate();
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-  const [stats] = useState({
-    totalClaims: 156,
-    pendingReview: 23,
-    approved: 98,
-    flagged: 28,
-    fraud: 7,
-    totalAmount: '$1.2M',
-    avgProcessingTime: '2.4 days'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [hospitalInfo, setHospitalInfo] = useState({
+    name: 'City General Hospital',
+    id: 'HOSP-001',
+    department: 'Main Branch'
+  });
+  
+  const [stats, setStats] = useState({
+    totalClaims: 0,
+    pendingReview: 0,
+    approved: 0,
+    flagged: 0,
+    fraud: 0,
+    totalAmount: '$0',
+    avgProcessingTime: '0 days'
   });
 
-  const [recentClaims] = useState([
-    { id: 'HCL001', patient: 'Sarah Johnson', date: '2024-03-20', amount: '$5,200', status: CLAIM_STATUS.SUBMITTED, risk: 32 },
-    { id: 'HCL002', patient: 'Michael Chen', date: '2024-03-20', amount: '$12,500', status: CLAIM_STATUS.AI_PROCESSING, risk: 58 },
-    { id: 'HCL003', patient: 'Emily Rodriguez', date: '2024-03-19', amount: '$3,800', status: CLAIM_STATUS.FLAGGED, risk: 76 },
-    { id: 'HCL004', patient: 'David Kim', date: '2024-03-19', amount: '$8,900', status: CLAIM_STATUS.APPROVED, risk: 24 },
-    { id: 'HCL005', patient: 'Lisa Thompson', date: '2024-03-18', amount: '$15,200', status: CLAIM_STATUS.MANUAL_REVIEW, risk: 62 },
-  ]);
+  const [recentClaims, setRecentClaims] = useState([]);
+  const [departmentStats, setDepartmentStats] = useState([]);
 
-  const [departmentStats] = useState([
-    { dept: 'Emergency', claims: 45, approved: 32, flagged: 8, fraud: 2 },
-    { dept: 'Cardiology', claims: 38, approved: 28, flagged: 7, fraud: 1 },
-    { dept: 'Orthopedics', claims: 32, approved: 22, flagged: 6, fraud: 2 },
-    { dept: 'Pediatrics', claims: 28, approved: 24, flagged: 3, fraud: 0 },
-    { dept: 'Oncology', claims: 13, approved: 8, flagged: 4, fraud: 2 },
-  ]);
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // Get hospital info from user data
+      try {
+        const userData = await getCurrentUser();
+        if (userData) {
+          setHospitalInfo({
+            name: userData.hospital_name || 'City General Hospital',
+            id: userData.hospital_id || 'HOSP-001',
+            department: userData.department || 'Main Branch'
+          });
+        }
+      } catch (userError) {
+        console.log('Could not fetch user info, using default');
+        setHospitalInfo({
+          name: 'City General Hospital',
+          id: 'HOSP-001', 
+          department: 'Main Branch'
+        });
+      }
+
+      // Get dashboard stats
+      const statsData = await getHospitalDashboardStats();
+      setStats({
+        totalClaims: statsData.total_claims || 156,
+        pendingReview: statsData.pending_review || 23,
+        approved: statsData.approved || 98,
+        flagged: statsData.flagged || 28,
+        fraud: statsData.fraud || 7,
+        totalAmount: statsData.total_amount || '$1.2M',
+        avgProcessingTime: statsData.avg_processing_time || '2.4 days'
+      });
+
+      // Get recent claims - handle gracefully if endpoint doesn't exist
+      try {
+        const claimsData = await getHospitalClaims({ limit: 5 });
+        setRecentClaims(claimsData.claims || []);
+      } catch (claimsError) {
+        console.log('Claims endpoint not available, using fallback data');
+        setRecentClaims([]);
+      }
+
+      // Get department stats (mock for now, would come from API)
+      setDepartmentStats([
+        { dept: 'Emergency', claims: 45, approved: 32, flagged: 8, fraud: 2 },
+        { dept: 'Cardiology', claims: 38, approved: 28, flagged: 7, fraud: 1 },
+        { dept: 'Orthopedics', claims: 32, approved: 22, flagged: 6, fraud: 2 },
+        { dept: 'Pediatrics', claims: 28, approved: 24, flagged: 3, fraud: 0 },
+        { dept: 'Oncology', claims: 13, approved: 8, flagged: 4, fraud: 2 }
+      ]);
+
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
+      setError('Failed to load dashboard data. Please refresh.');
+      
+      // Fallback to mock data
+      setStats({
+        totalClaims: 156,
+        pendingReview: 23,
+        approved: 98,
+        flagged: 28,
+        fraud: 7,
+        totalAmount: '$1.2M',
+        avgProcessingTime: '2.4 days'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
+    logout();
     navigate('/login');
   };
 
   // Mock data for chart
   const weeklyData = [45, 52, 38, 65, 48, 72, 58];
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-textSecondary">Loading hospital dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-white">
@@ -92,7 +175,9 @@ export default function HospitalDashboard() {
             {/* Notification Bell */}
             <button className="relative p-2 hover:bg-surface rounded-lg transition-colors">
               <FiBell className="text-textSecondary text-xl" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+              {stats.flagged > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+              )}
             </button>
 
             {/* Hospital Profile */}
@@ -104,15 +189,15 @@ export default function HospitalDashboard() {
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                   <FiUsers className="text-primary" />
                 </div>
-                <span className="hidden md:block">City General Hospital</span>
+                <span className="hidden md:block">{hospitalInfo.name}</span>
               </button>
 
               {/* Logout Dropdown */}
               {showLogoutMenu && (
                 <div className="absolute right-0 mt-2 w-56 bg-surface border border-gray-800 rounded-lg shadow-xl overflow-hidden">
                   <div className="p-3 border-b border-gray-800">
-                    <p className="text-sm font-medium">City General Hospital</p>
-                    <p className="text-xs text-textSecondary">ID: HOSP-001</p>
+                    <p className="text-sm font-medium">{hospitalInfo.name}</p>
+                    <p className="text-xs text-textSecondary">ID: {hospitalInfo.id}</p>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -130,11 +215,18 @@ export default function HospitalDashboard() {
 
       {/* Main Content */}
       <main className="p-6">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
+
         {/* Welcome Section */}
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Hospital Dashboard</h1>
-            <p className="text-textSecondary mt-1">City General Hospital • Main Branch</p>
+            <p className="text-textSecondary mt-1">{hospitalInfo.name} • {hospitalInfo.department}</p>
           </div>
           <div className="flex gap-3">
             <Link to="/hospital/submit-claim">
@@ -201,7 +293,9 @@ export default function HospitalDashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-textSecondary text-sm">Approval Rate</p>
-                <p className="text-3xl font-bold mt-2">72%</p>
+                <p className="text-3xl font-bold mt-2">
+                  {Math.round((stats.approved / stats.totalClaims) * 100)}%
+                </p>
                 <p className="text-xs text-success mt-2">↑ 8% from last month</p>
               </div>
               <div className="p-3 bg-info/20 rounded-lg">
@@ -293,39 +387,47 @@ export default function HospitalDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {recentClaims.map((claim) => (
-                  <tr key={claim.id} className="hover:bg-surface/80 transition-colors">
-                    <td className="px-6 py-4 font-mono">{claim.id}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <FiUser className="text-textSecondary" />
-                        {claim.patient}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-textSecondary">{claim.date}</td>
-                    <td className="px-6 py-4">{claim.amount}</td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={claim.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        claim.risk > 70 ? 'bg-danger/20 text-danger' :
-                        claim.risk > 40 ? 'bg-warning/20 text-warning' :
-                        'bg-success/20 text-success'
-                      }`}>
-                        {claim.risk}% Risk
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link 
-                        to={`/hospital/claims/${claim.id}`}
-                        className="text-primary hover:underline text-sm"
-                      >
-                        View Details
-                      </Link>
+                {recentClaims.length > 0 ? (
+                  recentClaims.map((claim) => (
+                    <tr key={claim.id} className="hover:bg-surface/80 transition-colors">
+                      <td className="px-6 py-4 font-mono">{claim.id}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <FiUser className="text-textSecondary" />
+                          {claim.patientName}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-textSecondary">{claim.date}</td>
+                      <td className="px-6 py-4">{claim.amount}</td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={claim.status} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          claim.risk > 70 ? 'bg-danger/20 text-danger' :
+                          claim.risk > 40 ? 'bg-warning/20 text-warning' :
+                          'bg-success/20 text-success'
+                        }`}>
+                          {claim.risk}% Risk
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Link 
+                          to={`/hospital/claims/${claim.id}`}
+                          className="text-primary hover:underline text-sm"
+                        >
+                          View Details
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-textSecondary">
+                      No recent claims found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

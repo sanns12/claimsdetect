@@ -56,129 +56,8 @@ export default function InsuranceClaimsList() {
     direction: 'desc'
   });
 
-  // Mock data - would come from API
-  const [claims] = useState([
-    { 
-      id: 'CLM2345',
-      patientName: 'Sarah Johnson',
-      hospital: 'City General Hospital',
-      date: '2024-03-20',
-      amount: 15200,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 94,
-      fraudScore: 0.92,
-      flags: ['Pattern Match', 'Amount Anomaly'],
-      department: 'Cardiology',
-      insuranceProvider: 'Blue Cross',
-      assignedTo: 'John Smith',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2346',
-      patientName: 'Michael Chen',
-      hospital: 'MediCare Plus Clinic',
-      date: '2024-03-20',
-      amount: 12500,
-      status: CLAIM_STATUS.FLAGGED,
-      risk: 76,
-      fraudScore: 0.78,
-      flags: ['Amount Anomaly'],
-      department: 'Orthopedics',
-      insuranceProvider: 'Aetna',
-      assignedTo: 'Jane Doe',
-      priority: 'high'
-    },
-    { 
-      id: 'CLM2347',
-      patientName: 'Emily Rodriguez',
-      hospital: 'HealthFirst Medical',
-      date: '2024-03-19',
-      amount: 3800,
-      status: CLAIM_STATUS.APPROVED,
-      risk: 24,
-      fraudScore: 0.12,
-      flags: [],
-      department: 'Emergency',
-      insuranceProvider: 'Cigna',
-      assignedTo: 'John Smith',
-      priority: 'normal'
-    },
-    { 
-      id: 'CLM2348',
-      patientName: 'David Kim',
-      hospital: 'QuickCare Center',
-      date: '2024-03-19',
-      amount: 28900,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 88,
-      fraudScore: 0.89,
-      flags: ['Pattern Match', 'Hospital History', 'Amount Anomaly'],
-      department: 'Oncology',
-      insuranceProvider: 'UnitedHealth',
-      assignedTo: 'Jane Doe',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2349',
-      patientName: 'Lisa Thompson',
-      hospital: 'Premier Health Group',
-      date: '2024-03-18',
-      amount: 8200,
-      status: CLAIM_STATUS.MANUAL_REVIEW,
-      risk: 62,
-      fraudScore: 0.58,
-      flags: ['Hospital History'],
-      department: 'Neurology',
-      insuranceProvider: 'Blue Cross',
-      assignedTo: 'Unassigned',
-      priority: 'medium'
-    },
-    { 
-      id: 'CLM2350',
-      patientName: 'James Wilson',
-      hospital: 'City General Hospital',
-      date: '2024-03-18',
-      amount: 45600,
-      status: CLAIM_STATUS.FRAUD,
-      risk: 96,
-      fraudScore: 0.95,
-      flags: ['Pattern Match', 'Amount Anomaly', 'Duplicate'],
-      department: 'Cardiology',
-      insuranceProvider: 'Aetna',
-      assignedTo: 'John Smith',
-      priority: 'urgent'
-    },
-    { 
-      id: 'CLM2351',
-      patientName: 'Maria Garcia',
-      hospital: 'MediCare Plus Clinic',
-      date: '2024-03-17',
-      amount: 5300,
-      status: CLAIM_STATUS.SUBMITTED,
-      risk: 32,
-      fraudScore: 0.28,
-      flags: [],
-      department: 'Pediatrics',
-      insuranceProvider: 'Cigna',
-      assignedTo: 'Unassigned',
-      priority: 'normal'
-    },
-    { 
-      id: 'CLM2352',
-      patientName: 'Robert Brown',
-      hospital: 'HealthFirst Medical',
-      date: '2024-03-17',
-      amount: 12700,
-      status: CLAIM_STATUS.FLAGGED,
-      risk: 68,
-      fraudScore: 0.65,
-      flags: ['Amount Anomaly'],
-      department: 'General Medicine',
-      insuranceProvider: 'UnitedHealth',
-      assignedTo: 'Jane Doe',
-      priority: 'high'
-    }
-  ]);
+  // claims will be loaded from API
+  const [claims, setClaims] = useState([]);
 
   // Companies list for filter
   const companies = [
@@ -191,11 +70,51 @@ export default function InsuranceClaimsList() {
   ];
 
   // Load claims on mount
-  useEffect(() => {
-    setTimeout(() => {
+useEffect(() => {
+  const fetchClaims = async () => {
+    try {
+      setLoading(true);
+      const response = await getClaims();
+      
+      console.log('📥 Insurance claims response:', response);
+      
+      // The response should be { claims: [...] }
+      const claimsArray = response?.claims || [];
+      
+      if (claimsArray.length === 0) {
+        console.log('No claims found');
+        setClaims([]);
+        return;
+      }
+      
+      // Map API claims to UI shape
+      const mapped = claimsArray.map(c => ({
+        id: c.id || c.claim_id || `CLM${c.id}`,
+        patientName: c.patient_name || c.patientName || 'Unknown',
+        hospital: c.hospital_name || c.hospital || '',
+        date: c.created_at ? c.created_at.split('T')[0] : (c.date || ''),
+        amount: typeof c.amount === 'number' ? c.amount : parseFloat(c.claim_amount) || 0,
+        status: c.status || CLAIM_STATUS.SUBMITTED,
+        risk: c.risk_score || c.risk || 0,
+        fraudScore: c.fraud_probability || c.fraud_score || 0,
+        flags: c.flags || [],
+        department: c.department || null,
+        insuranceProvider: c.insurance_provider || null,
+        priority: c.priority || 'normal'
+      }));
+      
+      console.log(`✅ Mapped ${mapped.length} claims for display`);
+      setClaims(mapped);
+    } catch (err) {
+      console.error('❌ Failed to load claims:', err);
+      setClaims([]);
+    } finally {
       setLoading(false);
-    }, 1000);
-  }, []);
+    }
+  };
+  
+  fetchClaims();
+}, []);
 
   // Filter claims based on view mode and filters
   const filteredClaims = claims.filter(claim => {
@@ -696,7 +615,7 @@ export default function InsuranceClaimsList() {
                         <div>
                           <div className="font-medium">{claim.patientName}</div>
                           <div className="text-xs text-textSecondary">
-                            {claim.department}
+                            {claim.department || '-'}
                           </div>
                         </div>
                       </td>
@@ -704,7 +623,7 @@ export default function InsuranceClaimsList() {
                         <div>
                           <div>{claim.hospital}</div>
                           <div className="text-xs text-textSecondary">
-                            {claim.insuranceProvider}
+                            {claim.insuranceProvider || '-'}
                           </div>
                         </div>
                       </td>

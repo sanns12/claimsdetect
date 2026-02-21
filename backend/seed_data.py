@@ -1,46 +1,55 @@
-from backend.database import SessionLocal, engine
-from backend.models import User
-from backend.auth import get_password_hash
+from database import Database
+import asyncio
 
-def seed_users():
-    db = SessionLocal()
-
-    users = [
+async def seed_companies():
+    """Add initial companies to database"""
+    await Database.connect_db()
+    companies = Database.db.companies
+    
+    # Sample companies
+    sample_companies = [
         {
-            "name": "Test User",
-            "email": "user@test.com",
-            "password": "user123",
-            "role": "user"
+            "hospital_id": "HOSP-001",
+            "hospital_name": "City General Hospital",
+            "address": "123 Main St, New York, NY 10001",
+            "created_at": datetime.utcnow()
         },
         {
-            "name": "Test Hospital",
-            "email": "hospital@test.com",
-            "password": "hospital123",
-            "role": "hospital"
+            "hospital_id": "HOSP-002",
+            "hospital_name": "MediCare Plus Clinic",
+            "address": "456 Oak Ave, Los Angeles, CA 90001",
+            "created_at": datetime.utcnow()
         },
         {
-            "name": "Test Insurance",
-            "email": "insurance@test.com",
-            "password": "insurance123",
-            "role": "insurance"
+            "hospital_id": "HOSP-003",
+            "hospital_name": "HealthFirst Medical Center",
+            "address": "789 Pine St, Chicago, IL 60601",
+            "created_at": datetime.utcnow()
+        },
+        {
+            "hospital_id": "HOSP-004",
+            "hospital_name": "QuickCare Emergency",
+            "address": "321 Elm St, Houston, TX 77001",
+            "created_at": datetime.utcnow()
+        },
+        {
+            "hospital_id": "HOSP-005",
+            "hospital_name": "Premier Health Group",
+            "address": "555 Cedar Rd, Miami, FL 33101",
+            "created_at": datetime.utcnow()
         }
     ]
-
-    for u in users:
-        existing = db.query(User).filter(User.email == u["email"]).first()
+    
+    for company in sample_companies:
+        # Check if exists
+        existing = await companies.find_one({"hospital_id": company["hospital_id"]})
         if not existing:
-            user = User(
-                name=u["name"],
-                email=u["email"],
-                hashed_password=get_password_hash(u["password"]),
-                role=u["role"]
-            )
-            db.add(user)
-
-    db.commit()
-    db.close()
-    print("✅ Dummy users seeded successfully")
-
+            await companies.insert_one(company)
+            print(f"✅ Added {company['hospital_name']}")
+    
+    print("✅ Seed data complete")
+    await Database.close_db()
 
 if __name__ == "__main__":
-    seed_users()
+    from datetime import datetime
+    asyncio.run(seed_companies())

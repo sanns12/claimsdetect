@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
@@ -7,43 +7,114 @@ import {
   FiTrendingUp, FiClock, FiLogOut, FiUser, FiBell 
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
+import { getUserDashboardStats } from '../../services/dashboard';
+import { getUserClaims } from '../../services/claims';
+import { getCurrentUser, logout } from '../../services/auth';
 
 export default function UserDashboard() {
   const navigate = useNavigate();
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
-
-  const [stats] = useState({
-    total: 24,
-    approved: 18,
-    flagged: 4,
-    fraud: 2,
-    pending: 6
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState({
+    total: 0,
+    approved: 0,
+    flagged: 0,
+    fraud: 0,
+    pending: 0
   });
+  const [recentClaims, setRecentClaims] = useState([]);
+  const [user, setUser] = useState({ name: 'User', email: '' });
 
-  const [recentClaims] = useState([
-    { id: 'CLM001', date: '2024-03-15', amount: '$5,200', status: CLAIM_STATUS.APPROVED, risk: 23 },
-    { id: 'CLM002', date: '2024-03-14', amount: '$12,500', status: CLAIM_STATUS.AI_PROCESSING, risk: 67 },
-    { id: 'CLM003', date: '2024-03-13', amount: '$3,800', status: CLAIM_STATUS.FLAGGED, risk: 82 },
-    { id: 'CLM004', date: '2024-03-12', amount: '$8,900', status: CLAIM_STATUS.SUBMITTED, risk: 45 },
-    { id: 'CLM005', date: '2024-03-11', amount: '$15,200', status: CLAIM_STATUS.APPROVED, risk: 18 },
-  ]);
+  // Load dashboard data
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      setError('');
+      
+      try {
+        // Get user info
+        try {
+          const userData = await getCurrentUser();
+          if (userData) {
+            setUser(userData);
+          }
+        } catch (userError) {
+          console.log('Could not fetch user info, using stored data', userError);
+          const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+          if (storedUser.email) {
+            setUser({ name: storedUser.full_name || 'User', email: storedUser.email });
+          }
+        }
 
+        // Get dashboard stats
+        const statsData = await getUserDashboardStats();
+        setStats({
+          total: statsData.total_claims || 0,
+          approved: statsData.approved || 0,
+          flagged: statsData.flagged || 0, 
+          fraud: statsData.fraud || 0,
+          pending: statsData.pending_review || 0
+        });
+
+        // Get recent claims - handle gracefully if endpoint doesn't exist
+        try {
+          const claimsData = await getUserClaims({ limit: 5 });
+          setRecentClaims(claimsData.claims || []);
+        } catch (claimsError) {
+          console.log('Claims endpoint not available, using fallback data', claimsError);
+          setRecentClaims([]);
+        }
+        
+      } catch (err) {
+        console.error('Failed to load dashboard:', err);
+        setError('Failed to load dashboard data. Please refresh.');
+        
+        // Fallback to localStorage if API fails
+        const storedClaims = JSON.parse(localStorage.getItem('userClaims') || '[]');
+        setRecentClaims(storedClaims.slice(0, 5));
+        setStats({
+          total: storedClaims.length,
+          approved: storedClaims.filter(c => c.status === CLAIM_STATUS.APPROVED).length,
+          flagged: storedClaims.filter(c => c.status === CLAIM_STATUS.FLAGGED).length,
+          fraud: storedClaims.filter(c => c.status === CLAIM_STATUS.FRAUD).length,
+          pending: storedClaims.filter(c => 
+            [CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING].includes(c.status)
+          ).length
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  // Mock data for charts (still can be static)
   const monthlyData = [65, 78, 52, 84, 93, 71, 88, 95, 67, 82, 91, 77];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  const handleLogout = () => {
-    // Clear any auth tokens/session here
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('user');
-    navigate('/login');
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-textSecondary">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-white">
       {/* Header with Logout */}
       <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50">
         <div className="px-6 py-4 flex justify-between items-center">
-          {/* Left side - Logo and page title */}
           <div className="flex items-center gap-8">
             <Link to="/user/dashboard" className="text-2xl font-bold text-primary">
               InsureVerify
@@ -53,12 +124,13 @@ export default function UserDashboard() {
             </span>
           </div>
 
-          {/* Right side - Notifications and Profile/Logout */}
           <div className="flex items-center gap-4">
             {/* Notification Bell */}
             <button className="relative p-2 hover:bg-surface rounded-lg transition-colors">
               <FiBell className="text-textSecondary text-xl" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+              {stats.flagged > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+              )}
             </button>
 
             {/* User Menu with Logout */}
@@ -70,9 +142,7 @@ export default function UserDashboard() {
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                   <FiUser className="text-primary" />
                 </div>
-              <span className="hidden md:block">
-  {JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{"name":"User"}').name}
-</span>
+                <span className="hidden md:block">{user.name || 'User'}</span>
                 <FiClock className="text-textSecondary text-sm rotate-90" />
               </button>
 
@@ -80,8 +150,8 @@ export default function UserDashboard() {
               {showLogoutMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-surface border border-gray-800 rounded-lg shadow-xl overflow-hidden">
                   <div className="p-3 border-b border-gray-800">
-                    <p className="text-sm font-medium">{JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{"name":"User"}').name}</p>
-                    <p className="text-xs text-textSecondary">john.doe@example.com</p>
+                    <p className="text-sm font-medium">{user.name || 'User'}</p>
+                    <p className="text-xs text-textSecondary">{user.email || 'user@example.com'}</p>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -99,9 +169,16 @@ export default function UserDashboard() {
 
       {/* Main Content */}
       <main className="p-6">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
+
         {/* Welcome Message */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Welcome back, John</h1>
+          <h1 className="text-3xl font-bold">Welcome back, {user.name || 'User'}</h1>
           <p className="text-textSecondary mt-1">Track and manage your insurance claims</p>
         </div>
 
@@ -117,9 +194,6 @@ export default function UserDashboard() {
                 <FiFileText className="text-primary text-xl" />
               </div>
             </div>
-            <div className="mt-4 text-xs text-textSecondary">
-              <span className="text-success">↑ 12%</span> from last month
-            </div>
           </div>
 
           <div className="bg-surface p-6 rounded-xl border border-gray-800">
@@ -131,9 +205,6 @@ export default function UserDashboard() {
               <div className="p-3 bg-success/20 rounded-lg">
                 <FiCheckCircle className="text-success text-xl" />
               </div>
-            </div>
-            <div className="mt-4 text-xs text-textSecondary">
-              <span className="text-success">↑ 8%</span> from last month
             </div>
           </div>
 
@@ -147,9 +218,6 @@ export default function UserDashboard() {
                 <FiAlertTriangle className="text-warning text-xl" />
               </div>
             </div>
-            <div className="mt-4 text-xs text-textSecondary">
-              <span className="text-danger">↑ 2</span> new flags
-            </div>
           </div>
 
           <div className="bg-surface p-6 rounded-xl border border-gray-800">
@@ -161,9 +229,6 @@ export default function UserDashboard() {
               <div className="p-3 bg-danger/20 rounded-lg">
                 <FiXCircle className="text-danger text-xl" />
               </div>
-            </div>
-            <div className="mt-4 text-xs text-textSecondary">
-              <span className="text-success">↓ 1</span> resolved
             </div>
           </div>
 
@@ -177,14 +242,12 @@ export default function UserDashboard() {
                 <FiTrendingUp className="text-info text-xl" />
               </div>
             </div>
-            <div className="mt-4 text-xs text-textSecondary">
-              <span className="text-warning">3</span> need attention
-            </div>
           </div>
         </div>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Bar Chart - Claims by Month */}
           <div className="lg:col-span-2 bg-surface p-6 rounded-xl border border-gray-800">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold">Claims Activity</h3>
@@ -212,6 +275,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
+          {/* Pie Chart - Status Distribution */}
           <div className="bg-surface p-6 rounded-xl border border-gray-800">
             <h3 className="font-bold mb-6">Status Distribution</h3>
             <div className="flex items-center justify-center mb-6">
@@ -220,9 +284,9 @@ export default function UserDashboard() {
                   className="w-full h-full rounded-full"
                   style={{
                     background: `conic-gradient(
-                      #10B981 0deg 270deg,
-                      #F59E0B 270deg 330deg,
-                      #EF4444 330deg 360deg
+                      #10B981 0deg ${stats.approved / stats.total * 360}deg,
+                      #F59E0B ${stats.approved / stats.total * 360}deg ${(stats.approved + stats.flagged) / stats.total * 360}deg,
+                      #EF4444 ${(stats.approved + stats.flagged) / stats.total * 360}deg 360deg
                     )`
                   }}
                 ></div>
@@ -278,43 +342,51 @@ export default function UserDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {recentClaims.map((claim) => (
-                  <tr key={claim.id} className="hover:bg-surface/80 transition-colors">
-                    <td className="px-6 py-4 font-mono">{claim.id}</td>
-                    <td className="px-6 py-4 text-textSecondary">{claim.date}</td>
-                    <td className="px-6 py-4">{claim.amount}</td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={claim.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-background rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              claim.risk > 70 ? 'bg-danger' : 
-                              claim.risk > 40 ? 'bg-warning' : 'bg-success'
-                            }`}
-                            style={{ width: `${claim.risk}%` }}
-                          ></div>
+                {recentClaims.length > 0 ? (
+                  recentClaims.map((claim) => (
+                    <tr key={claim.id} className="hover:bg-surface/80 transition-colors">
+                      <td className="px-6 py-4 font-mono">{claim.id}</td>
+                      <td className="px-6 py-4 text-textSecondary">{claim.date}</td>
+                      <td className="px-6 py-4">{claim.amount}</td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={claim.status} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-background rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                claim.risk > 70 ? 'bg-danger' : 
+                                claim.risk > 40 ? 'bg-warning' : 'bg-success'
+                              }`}
+                              style={{ width: `${claim.risk}%` }}
+                            ></div>
+                          </div>
+                          <span className={`text-sm ${
+                            claim.risk > 70 ? 'text-danger' : 
+                            claim.risk > 40 ? 'text-warning' : 'text-success'
+                          }`}>
+                            {claim.risk}
+                          </span>
                         </div>
-                        <span className={`text-sm ${
-                          claim.risk > 70 ? 'text-danger' : 
-                          claim.risk > 40 ? 'text-warning' : 'text-success'
-                        }`}>
-                          {claim.risk}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link 
-                        to={`/user/claims/${claim.id}`}
-                        className="text-primary hover:underline text-sm"
-                      >
-                        View Details →
-                      </Link>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Link 
+                          to={`/user/claims/${claim.id}`}
+                          className="text-primary hover:underline text-sm"
+                        >
+                          View Details →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-8 text-center text-textSecondary">
+                      No claims yet. Submit your first claim!
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

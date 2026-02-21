@@ -45,160 +45,123 @@ export default function InsuranceClaimDetail() {
 
   // Load claim data directly in useEffect - NO separate function
   useEffect(() => {
-    // Mock data - replace with API call
-    setTimeout(() => {
-      const mockClaim = {
-        id: id,
-        patientId: 'P100234',
-        patientName: 'Sarah Johnson',
-        age: 45,
-        gender: 'Female',
-        date: '2024-03-20',
-        amount: 15200,
-        status: CLAIM_STATUS.FLAGGED,
-        risk: 76,
-        fraudScore: 0.78,
-        department: 'Cardiology',
-        diagnosis: 'Cardiovascular Disease',
-        procedure: 'Angioplasty',
-        hospital: 'City General Hospital',
-        hospitalId: 'HOSP-001',
-        hospitalAddress: '123 Main St, New York, NY 10001',
-        doctor: 'Dr. Williams',
-        doctorLicense: 'MD12345',
-        insuranceProvider: 'Blue Cross',
-        policyNumber: 'BC-789012',
-        groupNumber: 'GRP-456',
-        admissionDate: '2024-03-15',
-        dischargeDate: '2024-03-18',
-        stayDuration: '3 days',
-        documents: [
-          { name: 'admission_form.pdf', size: '245 KB', type: 'PDF' },
-          { name: 'lab_results.pdf', size: '1.2 MB', type: 'PDF' },
-          { name: 'discharge_summary.pdf', size: '892 KB', type: 'PDF' },
-          { name: 'xray_image.jpg', size: '3.1 MB', type: 'Image' }
-        ],
-        flags: [
-          { type: 'Amount Anomaly', severity: 'high', description: 'Amount 45% above average for this procedure' },
-          { type: 'Hospital History', severity: 'medium', description: 'Hospital has 3 flagged claims this month' },
-          { type: 'Pattern Match', severity: 'high', description: 'Matches fraud pattern #F123' }
-        ],
-        fraudIndicators: [
-          { name: 'Amount vs Average', value: '+45%', risk: 'high' },
-          { name: 'Length of Stay', value: '-2 days', risk: 'medium' },
-          { name: 'Duplicate Codes', value: 'None', risk: 'low' },
-          { name: 'Provider History', value: '3 flags', risk: 'high' }
-        ],
-        submittedBy: 'Dr. Williams',
-        submittedAt: '2024-03-20T10:30:00',
-        lastUpdated: '2024-03-20T14:25:00',
-        priority: 'high',
-        assignedTo: 'John Smith',
-        reviewHistory: [
-          { action: 'AI Flagged', date: '2024-03-20 10:35', by: 'ML Model', reason: 'Amount anomaly detected' },
-          { action: 'Assigned', date: '2024-03-20 11:00', by: 'System', reason: 'Auto-assigned to John Smith' }
-        ]
-      };
-      
-      setClaim(mockClaim);
+    // Load real claim from API
+    (async () => {
+      try {
+        setLoading(true);
+        const numericId = id?.startsWith?.('CLM') ? parseInt(id.slice(3), 10) : parseInt(id, 10);
+        // Lazy import to avoid circular deps
+        const { getClaimById } = await import('../../services/claims');
+        const data = await getClaimById(isNaN(numericId) ? id : numericId);
 
-      setLimeFactors([
-        { 
-          name: 'Claim Amount', 
-          impact: 42, 
-          color: 'high',
-          description: 'Amount 45% above average for angioplasty'
-        },
-        { 
-          name: 'Hospital Risk Score', 
-          impact: 28, 
-          color: 'medium',
-          description: 'Hospital has elevated risk profile'
-        },
-        { 
-          name: 'Length of Stay', 
-          impact: 18, 
-          color: 'low',
-          description: 'Stay duration shorter than typical'
-        },
-        { 
-          name: 'Procedure Code', 
-          impact: 12, 
-          color: 'low',
-          description: 'Standard procedure with normal patterns'
+        // Map backend response to frontend-friendly shape
+        const mapped = {
+          id: data.id || data.claim_id || id,
+          patientId: data.patient_id || `P${String(data.user_id || 0).padStart(6, '0')}`,
+          patientName: data.patient_name || data.patientName || data.patient || 'Unknown',
+          age: data.age || data.patient_age || null,
+          gender: data.gender || null,
+          date: (data.created_at || data.submitted_at || '').split('T')[0] || data.date,
+          amount: typeof data.claim_amount === 'number' ? data.claim_amount : parseFloat(data.claim_amount) || data.amount || 0,
+          status: data.status || 'Submitted',
+          risk: data.risk_score || data.risk || 0,
+          fraudScore: data.fraud_probability || data.fraud_score || 0,
+          department: data.department || null,
+          diagnosis: data.diagnosis || data.disease || null,
+          procedure: data.procedure || null,
+          hospital: data.hospital_name || data.hospital || null,
+          hospitalId: data.hospital_id || null,
+          hospitalAddress: data.hospital_address || null,
+          doctor: data.doctor_name || data.doctor || null,
+          doctorLicense: data.doctor_license || null,
+          insuranceProvider: data.insurance_provider || null,
+          policyNumber: data.policy_number || null,
+          groupNumber: data.group_number || null,
+          admissionDate: data.admission_date || null,
+          dischargeDate: data.discharge_date || null,
+          stayDuration: data.duration_days ? `${data.duration_days} days` : null,
+          documents: data.documents || [],
+          flags: data.flags || [],
+          fraudIndicators: data.fraud_indicators || [],
+          submittedBy: data.submitted_by || null,
+          submittedAt: data.created_at || data.submitted_at || null,
+          lastUpdated: data.updated_at || null,
+          priority: data.priority || 'normal',
+          assignedTo: data.assigned_to || data.assigned || null,
+          reviewHistory: data.status_history || [],
+        };
+
+        setClaim(mapped);
+        // Try to map lime factors if provided
+        try {
+          const lime = data.lime_explanation || data.lime || null;
+          if (lime) {
+            setLimeFactors(Array.isArray(lime) ? lime : (lime.factors || []));
+          }
+        } catch (e) {
+          // ignore
         }
-      ]);
 
-      setSimilarClaims([
-        { id: 'CLM2340', amount: 14800, status: CLAIM_STATUS.FRAUD, similarity: '94%', date: '2024-03-15' },
-        { id: 'CLM2321', amount: 16100, status: CLAIM_STATUS.FRAUD, similarity: '89%', date: '2024-03-10' },
-        { id: 'CLM2298', amount: 13900, status: CLAIM_STATUS.FLAGGED, similarity: '82%', date: '2024-03-05' }
-      ]);
-
-      setLoading(false);
-    }, 1000);
+        setSimilarClaims([]);
+      } catch (err) {
+        console.error('Failed to load claim:', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]); // Only depends on id
 
   // Refresh handler - direct function
   const handleRefresh = () => {
-    // Mock data - replace with API call
-    setTimeout(() => {
-      const mockClaim = {
-        id: id,
-        patientId: 'P100234',
-        patientName: 'Sarah Johnson',
-        age: 45,
-        gender: 'Female',
-        date: '2024-03-20',
-        amount: 15200,
-        status: CLAIM_STATUS.FLAGGED,
-        risk: 76,
-        fraudScore: 0.78,
-        department: 'Cardiology',
-        diagnosis: 'Cardiovascular Disease',
-        procedure: 'Angioplasty',
-        hospital: 'City General Hospital',
-        hospitalId: 'HOSP-001',
-        hospitalAddress: '123 Main St, New York, NY 10001',
-        doctor: 'Dr. Williams',
-        doctorLicense: 'MD12345',
-        insuranceProvider: 'Blue Cross',
-        policyNumber: 'BC-789012',
-        groupNumber: 'GRP-456',
-        admissionDate: '2024-03-15',
-        dischargeDate: '2024-03-18',
-        stayDuration: '3 days',
-        documents: [
-          { name: 'admission_form.pdf', size: '245 KB', type: 'PDF' },
-          { name: 'lab_results.pdf', size: '1.2 MB', type: 'PDF' },
-          { name: 'discharge_summary.pdf', size: '892 KB', type: 'PDF' },
-          { name: 'xray_image.jpg', size: '3.1 MB', type: 'Image' }
-        ],
-        flags: [
-          { type: 'Amount Anomaly', severity: 'high', description: 'Amount 45% above average for this procedure' },
-          { type: 'Hospital History', severity: 'medium', description: 'Hospital has 3 flagged claims this month' },
-          { type: 'Pattern Match', severity: 'high', description: 'Matches fraud pattern #F123' }
-        ],
-        fraudIndicators: [
-          { name: 'Amount vs Average', value: '+45%', risk: 'high' },
-          { name: 'Length of Stay', value: '-2 days', risk: 'medium' },
-          { name: 'Duplicate Codes', value: 'None', risk: 'low' },
-          { name: 'Provider History', value: '3 flags', risk: 'high' }
-        ],
-        submittedBy: 'Dr. Williams',
-        submittedAt: '2024-03-20T10:30:00',
-        lastUpdated: '2024-03-20T14:25:00',
-        priority: 'high',
-        assignedTo: 'John Smith',
-        reviewHistory: [
-          { action: 'AI Flagged', date: '2024-03-20 10:35', by: 'ML Model', reason: 'Amount anomaly detected' },
-          { action: 'Assigned', date: '2024-03-20 11:00', by: 'System', reason: 'Auto-assigned to John Smith' }
-        ]
-      };
-      
-      setClaim(mockClaim);
-      setLoading(false);
-    }, 1000);
+    (async () => {
+      try {
+        setLoading(true);
+        const numericId = id?.startsWith?.('CLM') ? parseInt(id.slice(3), 10) : parseInt(id, 10);
+        const { getClaimById } = await import('../../services/claims');
+        const data = await getClaimById(isNaN(numericId) ? id : numericId);
+        // reuse mapping logic from initial load
+        const mapped = {
+          id: data.id || data.claim_id || id,
+          patientId: data.patient_id || `P${String(data.user_id || 0).padStart(6, '0')}`,
+          patientName: data.patient_name || data.patientName || data.patient || 'Unknown',
+          age: data.age || data.patient_age || null,
+          gender: data.gender || null,
+          date: (data.created_at || data.submitted_at || '').split('T')[0] || data.date,
+          amount: typeof data.claim_amount === 'number' ? data.claim_amount : parseFloat(data.claim_amount) || data.amount || 0,
+          status: data.status || 'Submitted',
+          risk: data.risk_score || data.risk || 0,
+          fraudScore: data.fraud_probability || data.fraud_score || 0,
+          department: data.department || null,
+          diagnosis: data.diagnosis || data.disease || null,
+          procedure: data.procedure || null,
+          hospital: data.hospital_name || data.hospital || null,
+          hospitalId: data.hospital_id || null,
+          hospitalAddress: data.hospital_address || null,
+          doctor: data.doctor_name || data.doctor || null,
+          doctorLicense: data.doctor_license || null,
+          insuranceProvider: data.insurance_provider || null,
+          policyNumber: data.policy_number || null,
+          groupNumber: data.group_number || null,
+          admissionDate: data.admission_date || null,
+          dischargeDate: data.discharge_date || null,
+          stayDuration: data.duration_days ? `${data.duration_days} days` : null,
+          documents: data.documents || [],
+          flags: data.flags || [],
+          fraudIndicators: data.fraud_indicators || [],
+          submittedBy: data.submitted_by || null,
+          submittedAt: data.created_at || data.submitted_at || null,
+          lastUpdated: data.updated_at || null,
+          priority: data.priority || 'normal',
+          assignedTo: data.assigned_to || data.assigned || null,
+          reviewHistory: data.status_history || [],
+        };
+        setClaim(mapped);
+      } catch (err) {
+        console.error('Failed to refresh claim:', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
   };
 
   const handleDecision = (action) => {

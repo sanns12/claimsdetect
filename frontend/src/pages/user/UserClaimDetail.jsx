@@ -20,52 +20,52 @@ import {
   FiRefreshCw
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
-import { getClaimDetails, getLimeExplanation, uploadAdditionalDocs } from '../../services/claims';
+import { getClaimById, getLimeExplanation, uploadAdditionalDocs } from '../../services/claims';
+import { formatClaimFromApi } from '../../utils/apiHelpers';
 
 export default function UserClaimDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [claim, setClaim] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showUploader, setShowUploader] = useState(false);
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [limeFactors, setLimeFactors] = useState([]);
   const [loadingExplanation, setLoadingExplanation] = useState(false);
-  const [error, setError] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
 
-  // Load claim data with ML explanation
+  // Load claim data
   useEffect(() => {
-    loadClaimWithML();
+    loadClaimData();
   }, [id]);
 
-  const loadClaimWithML = async () => {
+  const loadClaimData = async () => {
     setLoading(true);
     setError('');
     
     try {
-      // Get claim details from backend
-      const claimData = await getClaimDetails(id);
-      setClaim(claimData);
+      // Get claim details from API
+      const claimData = await getClaimById(id);
+      const formattedClaim = formatClaimFromApi(claimData);
+      setClaim(formattedClaim);
 
-      // Get LIME explanation from ML model
+      // Get LIME explanation
       await loadLimeExplanation();
       
     } catch (err) {
       console.error('Failed to load claim:', err);
-      setError(err.message || 'Failed to load claim details');
+      setError('Failed to load claim details. Please try again.');
       
-      // Fallback to localStorage if backend fails
+      // Fallback to localStorage
       const storedClaims = JSON.parse(localStorage.getItem('userClaims') || '[]');
       const foundClaim = storedClaims.find(c => c.id === id);
       
       if (foundClaim) {
         setClaim(foundClaim);
-        // Use mock LIME data for localStorage claims
+        // Generate mock LIME factors
         setLimeFactors(generateMockLimeFactors(foundClaim));
       } else {
-        // If not found anywhere, redirect after delay
         setTimeout(() => {
           navigate('/user/claims', { 
             state: { message: 'Claim not found', type: 'error' } 
@@ -84,7 +84,7 @@ export default function UserClaimDetail() {
       setLimeFactors(explanation.factors);
     } catch (err) {
       console.error('Failed to load LIME explanation:', err);
-      // Generate mock factors based on claim data
+      // Generate mock factors if API fails
       if (claim) {
         setLimeFactors(generateMockLimeFactors(claim));
       }
@@ -101,30 +101,22 @@ export default function UserClaimDetail() {
       { 
         name: 'Claim Amount', 
         impact: amount > 10000 ? 42 : amount > 5000 ? 28 : 15,
+        color: amount > 10000 ? 'high' : amount > 5000 ? 'medium' : 'low',
         description: amount > 10000 ? 'Amount significantly exceeds average' : 'Amount within normal range'
       },
       { 
         name: 'Hospital Stay Duration', 
         impact: 35,
+        color: 'medium',
         description: 'Duration matches typical pattern for this condition'
       },
       { 
         name: 'Age Factor', 
         impact: age > 60 ? 30 : age < 18 ? 25 : 18,
+        color: age > 60 ? 'high' : age < 18 ? 'medium' : 'low',
         description: age > 60 ? 'Higher risk demographic' : 'Standard risk profile'
-      },
-      { 
-        name: 'Disease Type', 
-        impact: 23,
-        description: claimData.disease || 'Common condition with established patterns'
       }
     ];
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadClaimWithML();
-    setRefreshing(false);
   };
 
   const handleFileDrop = (acceptedFiles) => {
@@ -142,32 +134,26 @@ export default function UserClaimDetail() {
     setError('');
     
     try {
-      // Upload to backend
       const result = await uploadAdditionalDocs(id, files);
       
       // Update local claim with new files
       const updatedClaim = {
         ...claim,
-        files: [...(claim.files || []), ...result.uploadedFiles]
+        documents: [...(claim.documents || []), ...result.uploadedFiles]
       };
       setClaim(updatedClaim);
       
-      // Clear uploader
       setFiles([]);
       setShowUploader(false);
       
-      // Show success message (could add a toast notification here)
-      console.log('Files uploaded successfully');
-      
     } catch (err) {
       console.error('Upload failed:', err);
-      setError(err.message || 'Failed to upload files');
+      setError('Failed to upload files. Please try again.');
     } finally {
       setUploading(false);
     }
   };
 
-  // Calculate stay duration
   const getStayDuration = () => {
     if (claim?.admissionDate && claim?.dischargeDate) {
       const start = new Date(claim.admissionDate);
@@ -178,42 +164,35 @@ export default function UserClaimDetail() {
     return null;
   };
 
-  // Build timeline from claim status
   const buildTimeline = () => {
     const timeline = [
       { 
         status: 'Submitted', 
-        date: claim?.submittedAt?.split('T')[0] || claim?.date || '2024-03-15', 
+        date: claim?.submittedAt?.split('T')[0] || claim?.date, 
         time: claim?.submittedAt ? new Date(claim.submittedAt).toLocaleTimeString() : '10:30 AM',
         completed: true,
         description: 'Claim submitted successfully'
       }
     ];
 
-    // Add AI Processing if applicable
-    if (claim?.status !== CLAIM_STATUS.SUBMITTED || claim?.aiProcessedAt) {
+    if (claim?.status !== CLAIM_STATUS.SUBMITTED) {
       timeline.push({
         status: 'AI Processing', 
-        date: claim?.aiProcessedAt?.split('T')[0] || claim?.date || '2024-03-15', 
-        time: claim?.aiProcessedAt ? new Date(claim.aiProcessedAt).toLocaleTimeString() : '10:35 AM',
+        date: claim?.date, 
+        time: '10:35 AM',
         completed: claim?.status !== CLAIM_STATUS.SUBMITTED,
-        description: claim?.mlAnalysisComplete 
-          ? 'AI analysis complete' 
-          : 'AI analysis in progress'
+        description: 'AI analysis complete'
       });
     }
 
-    // Add final status
     timeline.push({
       status: claim?.status === CLAIM_STATUS.APPROVED ? 'Approved' : 
                claim?.status === CLAIM_STATUS.FLAGGED ? 'Flagged' :
                claim?.status === CLAIM_STATUS.FRAUD ? 'Fraud Detected' :
                claim?.status === CLAIM_STATUS.MANUAL_REVIEW ? 'Manual Review' :
                'Processing',
-      date: claim?.processedAt?.split('T')[0] || 
-            (claim?.status !== CLAIM_STATUS.SUBMITTED ? '2024-03-16' : null),
-      time: claim?.processedAt ? new Date(claim.processedAt).toLocaleTimeString() : 
-            (claim?.status !== CLAIM_STATUS.SUBMITTED ? '02:15 PM' : null),
+      date: claim?.lastUpdated?.split('T')[0] || claim?.date,
+      time: claim?.lastUpdated ? new Date(claim.lastUpdated).toLocaleTimeString() : '02:15 PM',
       completed: claim?.status === CLAIM_STATUS.APPROVED || 
                  claim?.status === CLAIM_STATUS.FLAGGED ||
                  claim?.status === CLAIM_STATUS.FRAUD,
@@ -223,22 +202,20 @@ export default function UserClaimDetail() {
     return timeline;
   };
 
-  function getStatusDescription(status) {
+  const getStatusDescription = (status) => {
     switch(status) {
       case CLAIM_STATUS.APPROVED:
         return 'Claim has been approved for payout';
       case CLAIM_STATUS.FLAGGED:
         return 'Claim flagged for manual review based on ML analysis';
       case CLAIM_STATUS.FRAUD:
-        return 'Potential fraud detected by ML model - under investigation';
+        return 'Potential fraud detected by ML model';
       case CLAIM_STATUS.MANUAL_REVIEW:
         return 'Under review by claims adjuster';
-      case CLAIM_STATUS.AI_PROCESSING:
-        return 'ML model analyzing claim data';
       default:
         return 'Awaiting final decision';
     }
-  }
+  };
 
   const getTimelineIcon = (step) => {
     if (step.completed) return <FiCheckCircle className="text-success" />;
@@ -246,19 +223,17 @@ export default function UserClaimDetail() {
       return <FiAlertCircle className="text-warning" />;
     if (step.status === 'Fraud Detected') 
       return <FiAlertCircle className="text-danger" />;
-    if (step.status === 'AI Processing')
-      return <FiLoader className="text-primary animate-spin" />;
     return <FiLoader className="text-textSecondary animate-spin" />;
   };
 
-  const timeline = buildTimeline();
+  const timeline = claim ? buildTimeline() : [];
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-textSecondary">Loading claim details with ML analysis...</p>
+          <p className="text-textSecondary">Loading claim details...</p>
         </div>
       </div>
     );
@@ -295,12 +270,12 @@ export default function UserClaimDetail() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleRefresh}
-              disabled={refreshing}
+              onClick={loadClaimData}
+              disabled={loading}
               className="p-2 hover:bg-surface rounded-lg transition-colors"
-              title="Refresh ML analysis"
+              title="Refresh"
             >
-              <FiRefreshCw className={`text-textSecondary ${refreshing ? 'animate-spin' : ''}`} />
+              <FiRefreshCw className={`text-textSecondary ${loading ? 'animate-spin' : ''}`} />
             </button>
             <StatusBadge status={claim.status} />
           </div>
@@ -310,9 +285,8 @@ export default function UserClaimDetail() {
       {/* Error Message */}
       {error && (
         <div className="px-6 pt-6">
-          <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg flex items-center gap-3">
-            <FiAlertCircle />
-            <span>{error}</span>
+          <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
+            {error}
           </div>
         </div>
       )}
@@ -331,7 +305,7 @@ export default function UserClaimDetail() {
                   <p className="text-textSecondary text-sm mb-1">Patient Name</p>
                   <p className="font-medium flex items-center gap-2">
                     <FiUser className="text-primary" />
-                    {claim.fullName || 'John Doe'}
+                    {claim.patientName || 'John Doe'}
                   </p>
                 </div>
                 <div>
@@ -414,21 +388,6 @@ export default function UserClaimDetail() {
                   </div>
                 ))}
               </div>
-
-              {/* ML Confidence Score */}
-              {claim.mlConfidence && (
-                <div className="mt-4 pt-4 border-t border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-textSecondary">ML Confidence Score</span>
-                    <span className={`text-sm font-mono ${
-                      claim.mlConfidence > 0.8 ? 'text-success' :
-                      claim.mlConfidence > 0.6 ? 'text-warning' : 'text-danger'
-                    }`}>
-                      {(claim.mlConfidence * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -439,7 +398,7 @@ export default function UserClaimDetail() {
               <h2 className="text-lg font-bold mb-4">ML Risk Analysis</h2>
               
               <div className="flex justify-center mb-6">
-                <RiskScore score={claim.riskScore || claim.risk || 45} />
+                <RiskScore score={claim.risk || 45} />
               </div>
 
               {/* LIME Explanation */}
@@ -447,14 +406,6 @@ export default function UserClaimDetail() {
                 factors={limeFactors}
                 loading={loadingExplanation}
               />
-
-              {claim.riskFactors && (
-                <div className="mt-4 pt-4 border-t border-gray-800">
-                  <p className="text-xs text-textSecondary">
-                    Analysis based on {claim.riskFactors?.length || 0} similar claims in database
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Documents Card */}
@@ -462,13 +413,13 @@ export default function UserClaimDetail() {
               <h2 className="text-lg font-bold mb-4">Documents</h2>
               
               {/* Existing Documents */}
-              {claim.files && claim.files.length > 0 ? (
+              {claim.documents && claim.documents.length > 0 ? (
                 <div className="space-y-3 mb-4">
-                  {claim.files.map((file, index) => (
+                  {claim.documents.map((doc, index) => (
                     <div key={index} className="flex items-center justify-between bg-background p-3 rounded-lg">
                       <div className="flex items-center gap-3">
                         <FiFileText className="text-primary" />
-                        <span className="text-sm">{typeof file === 'string' ? file : file.name}</span>
+                        <span className="text-sm">{typeof doc === 'string' ? doc : doc.name}</span>
                       </div>
                       <button 
                         className="text-textSecondary hover:text-primary transition-colors"
@@ -529,37 +480,28 @@ export default function UserClaimDetail() {
               )}
             </div>
 
-            {/* Action Buttons (based on status) */}
+            {/* Status-specific messages */}
             {claim.status === CLAIM_STATUS.FLAGGED && (
               <div className="bg-warning/10 border border-warning/30 rounded-xl p-4">
-                <p className="text-warning text-sm mb-3">
-                  This claim has been flagged by our ML model for manual review. You may need to provide additional information.
+                <p className="text-warning text-sm">
+                  This claim has been flagged for manual review. You may need to provide additional information.
                 </p>
-                <Button variant="warning" className="w-full">
-                  Contact Support
-                </Button>
               </div>
             )}
 
             {claim.status === CLAIM_STATUS.FRAUD && (
               <div className="bg-danger/10 border border-danger/30 rounded-xl p-4">
-                <p className="text-danger text-sm mb-3">
-                  Potential fraud detected by ML analysis. Please contact our fraud department immediately.
+                <p className="text-danger text-sm">
+                  Potential fraud detected. Please contact support immediately.
                 </p>
-                <Button variant="danger" className="w-full">
-                  Contact Fraud Dept
-                </Button>
               </div>
             )}
 
             {claim.status === CLAIM_STATUS.APPROVED && (
               <div className="bg-success/10 border border-success/30 rounded-xl p-4">
-                <p className="text-success text-sm mb-3">
+                <p className="text-success text-sm">
                   Claim approved! Payment will be processed within 3-5 business days.
                 </p>
-                <Button variant="success" className="w-full">
-                  Track Payment
-                </Button>
               </div>
             )}
           </div>

@@ -87,29 +87,60 @@ export default function UserSubmitClaim() {
 
   const calculateRiskScore = async () => {
     setIsCalculatingRisk(true);
+    setSubmitError('');
+    
     try {
+      console.log('Calculating risk for:', {
+        age: parseInt(formData.age),
+        amount: parseFloat(formData.amount),
+        disease: formData.disease
+      });
+
       const riskData = await getRiskScore({
         age: parseInt(formData.age),
         amount: parseFloat(formData.amount),
         disease: formData.disease,
         admissionDate: formData.admissionDate,
-        dischargeDate: formData.dischargeDate,
-        hospital: 'City General Hospital' // This would come from user profile
+        dischargeDate: formData.dischargeDate
       });
-      setMlRiskScore(riskData);
-      return riskData;
+      
+      console.log('Risk data received:', riskData);
+      
+      // Ensure factors is always an array
+      const safeRiskData = {
+        ...riskData,
+        factors: riskData?.factors || [],
+        score: riskData?.score || 30,
+        confidence: riskData?.confidence || 0.7
+      };
+      
+      setMlRiskScore(safeRiskData);
+      return safeRiskData;
     } catch (error) {
-      console.error('Risk calculation failed:', error);
-      // Fallback to random score if ML fails
+      console.error('Risk calculation failed details:', error);
+      
+      // Create safe fallback data
+      const amount = parseFloat(formData.amount) || 5000;
+      const age = parseInt(formData.age) || 35;
+      
+      let score = 30;
+      if (amount > 50000) score += 30;
+      else if (amount > 25000) score += 20;
+      else if (amount > 10000) score += 10;
+      
+      if (age > 70) score += 15;
+      else if (age > 60) score += 10;
+      
       const fallbackScore = {
-        score: Math.floor(Math.random() * 40) + 20,
+        score: Math.min(score, 95),
         factors: [
-          { name: 'Claim Amount', impact: 35, description: 'Based on historical data' },
-          { name: 'Duration', impact: 25, description: 'Standard processing' },
-          { name: 'Disease Type', impact: 20, description: 'Common condition' }
+          { name: 'Claim Amount', impact: amount > 25000 ? 42 : 28, description: amount > 25000 ? 'High amount' : 'Normal range' },
+          { name: 'Patient Age', impact: age > 60 ? 35 : 18, description: age > 60 ? 'Senior citizen' : 'Standard age' },
+          { name: 'Duration', impact: 25, description: 'Standard processing' }
         ],
         confidence: 0.75
       };
+      
       setMlRiskScore(fallbackScore);
       return fallbackScore;
     } finally {
@@ -134,46 +165,56 @@ export default function UserSubmitClaim() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (currentStep === 3) {
-      setIsSubmitting(true);
-      setSubmitError('');
+  e.preventDefault();
+  
+  if (currentStep === 3) {
+    setIsSubmitting(true);
+    setSubmitError('');
 
-      try {
-        // Prepare claim data with ML risk score
-        const claimData = {
-          ...formData,
-          age: parseInt(formData.age),
-          amount: parseFloat(formData.amount),
-          riskScore: mlRiskScore?.score || Math.floor(Math.random() * 40) + 20,
-          riskFactors: mlRiskScore?.factors || [],
-          riskConfidence: mlRiskScore?.confidence || 0.8,
-          status: mlRiskScore?.score > 70 ? 'Flagged' : 
-                  mlRiskScore?.score > 50 ? 'AI Processing' : 'Submitted',
-          hospital: 'City General Hospital', // From user profile in real app
-          submittedAt: new Date().toISOString()
-        };
+    try {
+      // Calculate duration days
+      const start = new Date(formData.admissionDate);
+      const end = new Date(formData.dischargeDate);
+      const durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 
-        // Submit to backend
-        const result = await submitClaim(claimData, files);
-        
-        // Show success and redirect
-        navigate('/user/claims', { 
-          state: { 
-            message: 'Claim submitted successfully! ML analysis complete.',
-            claimId: result.claimId,
-            riskScore: result.riskScore
-          } 
-        });
-      } catch (error) {
-        setSubmitError(error.message || 'Failed to submit claim. Please try again.');
-        console.error('Submission error:', error);
-      } finally {
-        setIsSubmitting(false);
-      }
+      // Prepare claim data matching backend schema
+      const claimData = {
+        age: parseInt(formData.age),
+        disease: formData.disease,
+        admissionDate: formData.admissionDate,
+        dischargeDate: formData.dischargeDate,
+        amount: parseFloat(formData.amount),
+        fullName: formData.fullName,
+        durationDays: durationDays,
+        riskScore: mlRiskScore?.score || 30,
+        riskFactors: mlRiskScore?.factors || [],
+        status: mlRiskScore?.score > 70 ? 'Flagged' : 
+                mlRiskScore?.score > 50 ? 'AI Processing' : 'Submitted',
+        hospital: 'City General Hospital'
+      };
+
+      console.log('Submitting claim:', claimData);
+
+      // Submit to backend
+      const result = await submitClaim(claimData);
+      
+      console.log('Submit result:', result);
+      
+      // Show success and redirect
+      navigate('/user/claims', { 
+        state: { 
+          message: `Claim submitted successfully! Risk Score: ${result.risk_score ?? 'N/A'}`,
+          claimId: result.claim_id || result.id
+        } 
+      });
+    } catch (error) {
+      console.error('Submission error details:', error);
+      setSubmitError(error.message || 'Failed to submit claim. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-  };
+  }
+};
 
   // Calculate stay duration for display
   const getStayDuration = () => {
@@ -187,13 +228,13 @@ export default function UserSubmitClaim() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-white">
+    <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50">
+      <header className="bg-gray-800/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-50">
         <div className="px-6 py-4 flex items-center gap-4">
           <Link 
             to="/user/dashboard" 
-            className="p-2 hover:bg-surface rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
           >
             <FiArrowLeft className="text-xl" />
           </Link>
@@ -206,33 +247,33 @@ export default function UserSubmitClaim() {
         <div className="flex items-center justify-between max-w-3xl mx-auto">
           <div className="flex items-center flex-1">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              currentStep >= 1 ? 'bg-primary' : 'bg-surface'
+              currentStep >= 1 ? 'bg-blue-600' : 'bg-gray-700'
             }`}>
               1
             </div>
             <div className={`flex-1 h-1 mx-2 ${
-              currentStep >= 2 ? 'bg-primary' : 'bg-surface'
+              currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-700'
             }`}></div>
           </div>
           <div className="flex items-center flex-1">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              currentStep >= 2 ? 'bg-primary' : 'bg-surface'
+              currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-700'
             }`}>
               2
             </div>
             <div className={`flex-1 h-1 mx-2 ${
-              currentStep >= 3 ? 'bg-primary' : 'bg-surface'
+              currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-700'
             }`}></div>
           </div>
           <div className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-              currentStep >= 3 ? 'bg-primary' : 'bg-surface'
+              currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-700'
             }`}>
               3
             </div>
           </div>
         </div>
-        <div className="flex justify-between max-w-3xl mx-auto mt-2 text-sm text-textSecondary">
+        <div className="flex justify-between max-w-3xl mx-auto mt-2 text-sm text-gray-400">
           <span>Personal Info</span>
           <span>Claim Details</span>
           <span>Documents & Review</span>
@@ -245,9 +286,9 @@ export default function UserSubmitClaim() {
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
             <div className="space-y-6">
-              <div className="bg-surface p-6 rounded-xl border border-gray-800">
+              <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <FiUser className="text-primary" />
+                  <FiUser className="text-blue-500" />
                   Personal Information
                 </h2>
                 
@@ -259,13 +300,13 @@ export default function UserSubmitClaim() {
                       name="fullName"
                       value={formData.fullName}
                       onChange={handleChange}
-                      className={`w-full bg-background border rounded-lg py-3 px-4 focus:outline-none focus:border-primary ${
-                        errors.fullName ? 'border-danger' : 'border-gray-800'
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.fullName ? 'border-red-500' : 'border-gray-700'
                       }`}
                       placeholder="Enter your full name"
                     />
                     {errors.fullName && (
-                      <p className="text-danger text-xs mt-1">{errors.fullName}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>
                     )}
                   </div>
 
@@ -276,15 +317,15 @@ export default function UserSubmitClaim() {
                       name="age"
                       value={formData.age}
                       onChange={handleChange}
-                      className={`w-full bg-background border rounded-lg py-3 px-4 focus:outline-none focus:border-primary ${
-                        errors.age ? 'border-danger' : 'border-gray-800'
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.age ? 'border-red-500' : 'border-gray-700'
                       }`}
                       placeholder="Enter your age"
                       min="0"
                       max="120"
                     />
                     {errors.age && (
-                      <p className="text-danger text-xs mt-1">{errors.age}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.age}</p>
                     )}
                   </div>
                 </div>
@@ -304,9 +345,9 @@ export default function UserSubmitClaim() {
           {/* Step 2: Claim Details */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div className="bg-surface p-6 rounded-xl border border-gray-800">
+              <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <FiActivity className="text-primary" />
+                  <FiActivity className="text-blue-500" />
                   Claim Details
                 </h2>
                 
@@ -314,38 +355,38 @@ export default function UserSubmitClaim() {
                   <div>
                     <label className="block text-sm font-medium mb-2">Admission Date</label>
                     <div className="relative">
-                      <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+                      <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="date"
                         name="admissionDate"
                         value={formData.admissionDate}
                         onChange={handleChange}
-                        className={`w-full bg-background border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-primary ${
-                          errors.admissionDate ? 'border-danger' : 'border-gray-800'
+                        className={`w-full bg-gray-900 border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500 ${
+                          errors.admissionDate ? 'border-red-500' : 'border-gray-700'
                         }`}
                       />
                     </div>
                     {errors.admissionDate && (
-                      <p className="text-danger text-xs mt-1">{errors.admissionDate}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.admissionDate}</p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium mb-2">Discharge Date</label>
                     <div className="relative">
-                      <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+                      <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="date"
                         name="dischargeDate"
                         value={formData.dischargeDate}
                         onChange={handleChange}
-                        className={`w-full bg-background border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-primary ${
-                          errors.dischargeDate ? 'border-danger' : 'border-gray-800'
+                        className={`w-full bg-gray-900 border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500 ${
+                          errors.dischargeDate ? 'border-red-500' : 'border-gray-700'
                         }`}
                       />
                     </div>
                     {errors.dischargeDate && (
-                      <p className="text-danger text-xs mt-1">{errors.dischargeDate}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.dischargeDate}</p>
                     )}
                   </div>
 
@@ -355,8 +396,8 @@ export default function UserSubmitClaim() {
                       name="disease"
                       value={formData.disease}
                       onChange={handleChange}
-                      className={`w-full bg-background border rounded-lg py-3 px-4 focus:outline-none focus:border-primary ${
-                        errors.disease ? 'border-danger' : 'border-gray-800'
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.disease ? 'border-red-500' : 'border-gray-700'
                       }`}
                     >
                       {diseases.map(d => (
@@ -364,21 +405,21 @@ export default function UserSubmitClaim() {
                       ))}
                     </select>
                     {errors.disease && (
-                      <p className="text-danger text-xs mt-1">{errors.disease}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.disease}</p>
                     )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium mb-2">Claim Amount ($)</label>
                     <div className="relative">
-                      <FiDollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+                      <FiDollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         name="amount"
                         value={formData.amount}
                         onChange={handleChange}
-                        className={`w-full bg-background border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-primary ${
-                          errors.amount ? 'border-danger' : 'border-gray-800'
+                        className={`w-full bg-gray-900 border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500 ${
+                          errors.amount ? 'border-red-500' : 'border-gray-700'
                         }`}
                         placeholder="Enter amount"
                         min="0"
@@ -386,15 +427,15 @@ export default function UserSubmitClaim() {
                       />
                     </div>
                     {errors.amount && (
-                      <p className="text-danger text-xs mt-1">{errors.amount}</p>
+                      <p className="text-red-500 text-xs mt-1">{errors.amount}</p>
                     )}
                   </div>
                 </div>
 
                 {/* Stay Duration Display */}
                 {getStayDuration() && (
-                  <div className="mt-4 pt-4 border-t border-gray-800">
-                    <p className="text-sm text-textSecondary">
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <p className="text-sm text-gray-400">
                       Stay Duration: <span className="text-white font-medium">{getStayDuration()}</span>
                     </p>
                   </div>
@@ -421,39 +462,39 @@ export default function UserSubmitClaim() {
             <div className="space-y-6">
               {/* ML Risk Score Display */}
               {mlRiskScore && (
-                <div className={`bg-surface p-6 rounded-xl border ${
-                  mlRiskScore.score > 70 ? 'border-danger' :
-                  mlRiskScore.score > 50 ? 'border-warning' : 'border-success'
+                <div className={`bg-gray-800 p-6 rounded-xl border ${
+                  mlRiskScore.score > 70 ? 'border-red-500' :
+                  mlRiskScore.score > 50 ? 'border-yellow-500' : 'border-green-500'
                 }`}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold">ML Risk Analysis</h2>
                     <div className={`px-3 py-1 rounded-full text-sm ${
-                      mlRiskScore.score > 70 ? 'bg-danger/20 text-danger' :
-                      mlRiskScore.score > 50 ? 'bg-warning/20 text-warning' :
-                      'bg-success/20 text-success'
+                      mlRiskScore.score > 70 ? 'bg-red-500/20 text-red-500' :
+                      mlRiskScore.score > 50 ? 'bg-yellow-500/20 text-yellow-500' :
+                      'bg-green-500/20 text-green-500'
                     }`}>
-                      Confidence: {(mlRiskScore.confidence * 100).toFixed(0)}%
+                      Confidence: {Math.round((mlRiskScore.confidence || 0.7) * 100)}%
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-4 mb-4">
                     <div className={`text-3xl font-bold font-mono ${
-                      mlRiskScore.score > 70 ? 'text-danger' :
-                      mlRiskScore.score > 50 ? 'text-warning' : 'text-success'
+                      mlRiskScore.score > 70 ? 'text-red-500' :
+                      mlRiskScore.score > 50 ? 'text-yellow-500' : 'text-green-500'
                     }`}>
-                      {mlRiskScore.score}
+                      {mlRiskScore.score || 0}
                     </div>
                     <div className="flex-1">
-                      <div className="w-full bg-background rounded-full h-2">
+                      <div className="w-full bg-gray-900 rounded-full h-2">
                         <div 
                           className={`h-2 rounded-full ${
-                            mlRiskScore.score > 70 ? 'bg-danger' :
-                            mlRiskScore.score > 50 ? 'bg-warning' : 'bg-success'
+                            mlRiskScore.score > 70 ? 'bg-red-500' :
+                            mlRiskScore.score > 50 ? 'bg-yellow-500' : 'bg-green-500'
                           }`}
-                          style={{ width: `${mlRiskScore.score}%` }}
+                          style={{ width: `${mlRiskScore.score || 0}%` }}
                         ></div>
                       </div>
-                      <p className="text-sm text-textSecondary mt-1">
+                      <p className="text-sm text-gray-400 mt-1">
                         {mlRiskScore.score > 70 ? 'High Risk - Will be flagged for review' :
                          mlRiskScore.score > 50 ? 'Medium Risk - Additional verification needed' :
                          'Low Risk - Likely to be approved'}
@@ -461,28 +502,32 @@ export default function UserSubmitClaim() {
                     </div>
                   </div>
 
-                  {/* Risk Factors */}
+                  {/* Risk Factors - SAFE VERSION with null check */}
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Key Factors:</p>
-                    {mlRiskScore.factors.map((factor, index) => (
-                      <div key={index} className="flex justify-between text-sm">
-                        <span className="text-textSecondary">{factor.name}</span>
-                        <span className={
-                          factor.impact > 30 ? 'text-danger' :
-                          factor.impact > 15 ? 'text-warning' : 'text-success'
-                        }>
-                          {factor.impact}% influence
-                        </span>
-                      </div>
-                    ))}
+                    {mlRiskScore.factors && mlRiskScore.factors.length > 0 ? (
+                      mlRiskScore.factors.map((factor, index) => (
+                        <div key={index} className="flex justify-between text-sm">
+                          <span className="text-gray-400">{factor?.name || 'Unknown factor'}</span>
+                          <span className={
+                            (factor?.impact || 0) > 30 ? 'text-red-500' :
+                            (factor?.impact || 0) > 15 ? 'text-yellow-500' : 'text-green-500'
+                          }>
+                            {factor?.impact || 0}% influence
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-400">No risk factors available</p>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Document Upload */}
-              <div className="bg-surface p-6 rounded-xl border border-gray-800">
+              <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <FiFileText className="text-primary" />
+                  <FiFileText className="text-blue-500" />
                   Upload Supporting Documents
                 </h2>
                 
@@ -494,12 +539,12 @@ export default function UserSubmitClaim() {
                     <p className="text-sm font-medium mb-3">Uploaded Files ({files.length}):</p>
                     <div className="space-y-2">
                       {files.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between bg-background p-3 rounded-lg">
+                        <div key={index} className="flex items-center justify-between bg-gray-900 p-3 rounded-lg">
                           <div className="flex items-center gap-3">
-                            <FiFileText className="text-primary" />
+                            <FiFileText className="text-blue-500" />
                             <div>
                               <span className="text-sm">{file.name}</span>
-                              <span className="text-xs text-textSecondary ml-2">
+                              <span className="text-xs text-gray-400 ml-2">
                                 ({(file.size / 1024).toFixed(2)} KB)
                               </span>
                             </div>
@@ -507,7 +552,7 @@ export default function UserSubmitClaim() {
                           <button
                             type="button"
                             onClick={() => removeFile(index)}
-                            className="text-danger hover:text-danger/80 text-sm"
+                            className="text-red-500 hover:text-red-400 text-sm"
                           >
                             Remove
                           </button>
@@ -517,16 +562,16 @@ export default function UserSubmitClaim() {
                   </div>
                 )}
 
-                <p className="text-xs text-textSecondary mt-4">
+                <p className="text-xs text-gray-400 mt-4">
                   Supported formats: PDF, JPG, PNG, TXT (Max size: 10MB each)
                 </p>
               </div>
 
               {/* Error Message */}
               {submitError && (
-                <div className="bg-danger/10 border border-danger/30 rounded-lg p-4 flex items-center gap-3">
-                  <FiAlertCircle className="text-danger flex-shrink-0" />
-                  <p className="text-danger text-sm">{submitError}</p>
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
+                  <FiAlertCircle className="text-red-500 flex-shrink-0" />
+                  <p className="text-red-500 text-sm">{submitError}</p>
                 </div>
               )}
 
@@ -544,7 +589,7 @@ export default function UserSubmitClaim() {
               </div>
 
               {/* ML Processing Note */}
-              <p className="text-xs text-textSecondary text-center">
+              <p className="text-xs text-gray-400 text-center">
                 Your claim will be processed by our AI model for fraud detection and risk assessment
               </p>
             </div>

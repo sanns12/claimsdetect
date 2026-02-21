@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/Button';
 import { FiMail, FiLock, FiUser, FiArrowRight } from 'react-icons/fi';
 import { USER_ROLES } from '../utils/constants';
+import { login } from '../services/auth';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -13,55 +14,42 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (loading) return;
+    
     setError('');
     setLoading(true);
 
-    // Simulate login validation
-    setTimeout(() => {
-      // Basic validation
-      if (!email || !password) {
-        setError('Please fill in all fields');
-        setLoading(false);
-        return;
-      }
-
-      // For demo purposes, accept any email/password
-      // In real app, you'd call an API here
-      console.log('Login successful', { email, password, role, rememberMe });
+    try {
+      console.log('Attempting login with:', { email, role });
       
-      // Store user info based on role
-      const userData = {
-        email,
-        role,
-        name: email.split('@')[0], // Simple name from email
-      };
+      const response = await login(email, password, role);
       
-      // Save to localStorage if remember me is checked
-      if (rememberMe) {
-        localStorage.setItem('user', JSON.stringify(userData));
-      } else {
-        sessionStorage.setItem('user', JSON.stringify(userData));
+      console.log('Login response:', response);
+      
+      if (response.token) {
+        // Store token and user data
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+        localStorage.setItem('role', role);
+        
+        // Redirect based on role
+        const redirectPath = role === USER_ROLES.USER ? '/user/dashboard' :
+                            role === USER_ROLES.HOSPITAL ? '/hospital/dashboard' :
+                            '/insurance/dashboard';
+        
+        console.log('Redirecting to:', redirectPath);
+        navigate(redirectPath, { replace: true });
       }
-
-      // Redirect based on role
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
       setLoading(false);
-      
-      switch(role) {
-        case USER_ROLES.USER:
-          navigate('/user/dashboard');
-          break;
-        case USER_ROLES.HOSPITAL:
-          navigate('/hospital/dashboard');
-          break;
-        case USER_ROLES.INSURANCE:
-          navigate('/insurance/dashboard');
-          break;
-        default:
-          navigate('/user/dashboard');
-      }
-    }, 1000); // Simulate API delay
+    }
   };
 
   return (
@@ -75,7 +63,6 @@ export default function LoginPage() {
           <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
           <p className="text-textSecondary mb-8">Sign in to your account</p>
 
-          {/* Error Message */}
           {error && (
             <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg mb-6">
               {error}
@@ -165,19 +152,22 @@ export default function LoginPage() {
             </p>
           </form>
 
-          {/* Demo credentials hint */}
           <div className="mt-8 p-4 bg-surface/50 rounded-lg border border-gray-800">
             <p className="text-sm text-textSecondary mb-2">Demo Credentials:</p>
-            <p className="text-xs text-textSecondary">Any email/password works</p>
-            <p className="text-xs text-textSecondary mt-1">Try: user@example.com / any password</p>
+            <p className="text-xs text-textSecondary">Email: user@example.com</p>
+            <p className="text-xs text-textSecondary">Password: password123</p>
+            <p className="text-xs text-textSecondary mt-1">Any role works</p>
           </div>
         </div>
       </div>
 
-      {/* Right Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/10 to-transparent items-center justify-center p-8">
-        <div className="text-center">
-          <p className="text-3xl font-bold mb-4">Secure • AI-Powered • Real-time</p>
+      {/* Right Panel - Neural Network Visualization */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary/5 to-transparent items-center justify-center p-8 relative overflow-hidden">
+        {/* ... your existing neural network visualization ... */}
+        <div className="absolute bottom-12 left-12 text-white z-10">
+          <p className="text-2xl font-bold mb-2 bg-gradient-to-r from-primary to-white bg-clip-text text-transparent">
+            Secure • AI-Powered • Real-time
+          </p>
           <p className="text-textSecondary">Advanced fraud detection at scale</p>
         </div>
       </div>

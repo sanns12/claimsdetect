@@ -21,17 +21,21 @@ import {
   FiTrash2
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
+import { getHospitalClaims, deleteClaim } from '../../services/claims';
+import { formatClaimFromApi } from '../../utils/apiHelpers';
 
 export default function HospitalClaimsList() {
   const location = useLocation();
   const successMessage = location.state?.message;
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedClaims, setSelectedClaims] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [claimToDelete, setClaimToDelete] = useState(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [claims, setClaims] = useState([]);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -50,125 +54,6 @@ export default function HospitalClaimsList() {
     key: 'date',
     direction: 'desc'
   });
-
-  // Mock data - would come from API
-  const [claims, setClaims] = useState([
-    { 
-      id: 'HCL001', 
-      patientId: 'P100234',
-      patientName: 'Sarah Johnson',
-      age: 45,
-      gender: 'Female',
-      date: '2024-03-20', 
-      amount: 5200, 
-      status: CLAIM_STATUS.SUBMITTED, 
-      risk: 32,
-      department: 'Cardiology',
-      diagnosis: 'Cardiovascular Disease',
-      doctor: 'Dr. Williams',
-      insuranceProvider: 'Blue Cross',
-      policyNumber: 'BC-789012',
-      admissionDate: '2024-03-15',
-      dischargeDate: '2024-03-18',
-      documents: 3,
-      priority: 'normal',
-      submittedBy: 'Dr. Williams',
-      submittedAt: '2024-03-20T10:30:00',
-      lastUpdated: '2024-03-20T14:25:00'
-    },
-    { 
-      id: 'HCL002', 
-      patientId: 'P100567',
-      patientName: 'Michael Chen',
-      age: 62,
-      gender: 'Male',
-      date: '2024-03-20', 
-      amount: 12500, 
-      status: CLAIM_STATUS.AI_PROCESSING, 
-      risk: 58,
-      department: 'Orthopedics',
-      diagnosis: 'Fracture',
-      doctor: 'Dr. Rodriguez',
-      insuranceProvider: 'Aetna',
-      policyNumber: 'AE-456123',
-      admissionDate: '2024-03-10',
-      dischargeDate: '2024-03-19',
-      documents: 5,
-      priority: 'high',
-      submittedBy: 'Dr. Rodriguez',
-      submittedAt: '2024-03-20T09:15:00',
-      lastUpdated: '2024-03-20T15:30:00'
-    },
-    { 
-      id: 'HCL003', 
-      patientId: 'P100789',
-      patientName: 'Emily Rodriguez',
-      age: 34,
-      gender: 'Female',
-      date: '2024-03-19', 
-      amount: 3800, 
-      status: CLAIM_STATUS.FLAGGED, 
-      risk: 76,
-      department: 'Emergency',
-      diagnosis: 'Respiratory Infection',
-      doctor: 'Dr. Thompson',
-      insuranceProvider: 'Cigna',
-      policyNumber: 'CG-345678',
-      admissionDate: '2024-03-18',
-      dischargeDate: '2024-03-19',
-      documents: 2,
-      priority: 'urgent',
-      submittedBy: 'Dr. Thompson',
-      submittedAt: '2024-03-19T16:45:00',
-      lastUpdated: '2024-03-20T09:00:00'
-    },
-    { 
-      id: 'HCL004', 
-      patientId: 'P100345',
-      patientName: 'David Kim',
-      age: 51,
-      gender: 'Male',
-      date: '2024-03-19', 
-      amount: 8900, 
-      status: CLAIM_STATUS.APPROVED, 
-      risk: 24,
-      department: 'Neurology',
-      diagnosis: 'Stroke',
-      doctor: 'Dr. Patel',
-      insuranceProvider: 'UnitedHealth',
-      policyNumber: 'UH-901234',
-      admissionDate: '2024-03-05',
-      dischargeDate: '2024-03-15',
-      documents: 7,
-      priority: 'normal',
-      submittedBy: 'Dr. Patel',
-      submittedAt: '2024-03-19T11:20:00',
-      lastUpdated: '2024-03-20T10:15:00'
-    },
-    { 
-      id: 'HCL005', 
-      patientId: 'P100901',
-      patientName: 'Lisa Thompson',
-      age: 28,
-      gender: 'Female',
-      date: '2024-03-18', 
-      amount: 15200, 
-      status: CLAIM_STATUS.MANUAL_REVIEW, 
-      risk: 62,
-      department: 'Oncology',
-      diagnosis: 'Cancer',
-      doctor: 'Dr. Chen',
-      insuranceProvider: 'Blue Cross',
-      policyNumber: 'BC-567890',
-      admissionDate: '2024-03-01',
-      dischargeDate: '2024-03-17',
-      documents: 9,
-      priority: 'high',
-      submittedBy: 'Dr. Chen',
-      submittedAt: '2024-03-18T14:30:00',
-      lastUpdated: '2024-03-19T16:20:00'
-    }
-  ]);
 
   // Department options
   const departments = [
@@ -195,26 +80,34 @@ export default function HospitalClaimsList() {
     'Medicaid'
   ];
 
-  // Load claims on mount
+  // Load claims
   useEffect(() => {
-    // In a real app, fetch from API
-    // For now, load from localStorage or use mock data
-    const storedClaims = JSON.parse(localStorage.getItem('hospitalClaims') || '[]');
-    setTimeout(() => {
-      if (storedClaims.length > 0) {
-        setClaims(storedClaims);
-      }
-      setLoading(false);
-    }, 1000);
+    fetchClaims();
   }, []);
+
+  const fetchClaims = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await getHospitalClaims();
+      const formattedClaims = response.claims.map(formatClaimFromApi);
+      setClaims(formattedClaims);
+    } catch (err) {
+      console.error('Failed to fetch claims:', err);
+      setError('Failed to load claims. Please refresh.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter claims based on all criteria
   const filteredClaims = claims.filter(claim => {
     const matchesSearch = filters.search === '' || 
       claim.id.toLowerCase().includes(filters.search.toLowerCase()) ||
-      claim.patientName.toLowerCase().includes(filters.search.toLowerCase()) ||
-      claim.patientId.toLowerCase().includes(filters.search.toLowerCase()) ||
-      claim.doctor.toLowerCase().includes(filters.search.toLowerCase());
+      claim.patientName?.toLowerCase().includes(filters.search.toLowerCase()) ||
+      claim.patientId?.toLowerCase().includes(filters.search.toLowerCase()) ||
+      claim.doctor?.toLowerCase().includes(filters.search.toLowerCase());
 
     const matchesStatus = filters.status === 'all' || claim.status === filters.status;
     const matchesDepartment = filters.department === 'all' || claim.department === filters.department;
@@ -257,8 +150,8 @@ export default function HospitalClaimsList() {
     let bValue = b[sortConfig.key];
 
     if (sortConfig.key === 'amount' || sortConfig.key === 'risk') {
-      aValue = Number(aValue);
-      bValue = Number(bValue);
+      aValue = Number(aValue?.replace('$', '') || 0);
+      bValue = Number(bValue?.replace('$', '') || 0);
     }
 
     if (aValue < bValue) {
@@ -273,7 +166,10 @@ export default function HospitalClaimsList() {
   // Calculate summary stats
   const stats = {
     total: filteredClaims.length,
-    totalAmount: filteredClaims.reduce((sum, claim) => sum + claim.amount, 0),
+    totalAmount: filteredClaims.reduce((sum, claim) => {
+      const amount = parseFloat(claim.amount?.replace('$', '') || 0);
+      return sum + amount;
+    }, 0),
     pending: filteredClaims.filter(c => 
       [CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING, CLAIM_STATUS.MANUAL_REVIEW].includes(c.status)
     ).length,
@@ -314,20 +210,16 @@ export default function HospitalClaimsList() {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!claimToDelete) return;
     
     setDeleteInProgress(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      // Remove claim from array
+    try {
+      await deleteClaim(claimToDelete.id);
+      
+      // Update local state
       const updatedClaims = claims.filter(c => c.id !== claimToDelete.id);
-      
-      // Update localStorage
-      localStorage.setItem('hospitalClaims', JSON.stringify(updatedClaims));
-      
-      // Update state
       setClaims(updatedClaims);
       
       // Clear selection if needed
@@ -335,11 +227,15 @@ export default function HospitalClaimsList() {
         setSelectedClaims(prev => prev.filter(id => id !== claimToDelete.id));
       }
       
-      // Close modal
       setShowDeleteModal(false);
       setClaimToDelete(null);
+      
+    } catch (err) {
+      console.error('Delete failed:', err);
+      setError('Failed to delete claim. Please try again.');
+    } finally {
       setDeleteInProgress(false);
-    }, 1000);
+    }
   };
 
   const cancelDelete = () => {
@@ -414,7 +310,7 @@ export default function HospitalClaimsList() {
               Patient: <span className="text-white">{claimToDelete?.patientName}</span>
             </p>
             <p className="text-sm text-textSecondary mb-6">
-              This action cannot be undone. All documents associated with this claim will be permanently removed.
+              This action cannot be undone.
             </p>
 
             <div className="flex gap-3 justify-end">
@@ -473,6 +369,7 @@ export default function HospitalClaimsList() {
               size="sm"
               onClick={exportToCSV}
               className="flex items-center gap-2"
+              disabled={filteredClaims.length === 0}
             >
               <FiDownload />
               Export
@@ -481,7 +378,7 @@ export default function HospitalClaimsList() {
             <Button 
               variant="secondary" 
               size="sm"
-              onClick={() => window.location.reload()}
+              onClick={fetchClaims}
             >
               <FiRefreshCw />
             </Button>
@@ -495,6 +392,15 @@ export default function HospitalClaimsList() {
           <div className="bg-success/10 border border-success/30 text-success px-4 py-3 rounded-lg flex items-center gap-3">
             <FiCheckCircle />
             {successMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="px-6 pt-6">
+          <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
+            {error}
           </div>
         </div>
       )}
@@ -759,11 +665,11 @@ export default function HospitalClaimsList() {
                         <div>
                           <div>{claim.date}</div>
                           <div className="text-xs text-textSecondary">
-                            {new Date(claim.submittedAt).toLocaleTimeString()}
+                            {claim.submittedAt ? new Date(claim.submittedAt).toLocaleTimeString() : ''}
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-medium">${claim.amount.toLocaleString()}</td>
+                      <td className="px-6 py-4 font-medium">{claim.amount}</td>
                       <td className="px-6 py-4">
                         <StatusBadge status={claim.status} />
                       </td>
@@ -783,14 +689,6 @@ export default function HospitalClaimsList() {
                           <span className={`text-sm font-mono ${getRiskColor(claim.risk)}`}>
                             {claim.risk}%
                           </span>
-                        </div>
-                        <div className="text-xs text-textSecondary mt-1">
-                          {claim.priority === 'urgent' && (
-                            <span className="text-danger">⚠ Urgent</span>
-                          )}
-                          {claim.priority === 'high' && (
-                            <span className="text-warning">↑ High priority</span>
-                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">{claim.department}</td>
@@ -826,7 +724,7 @@ export default function HospitalClaimsList() {
             </div>
 
             {/* Empty State */}
-            {filteredClaims.length === 0 && (
+            {filteredClaims.length === 0 && !loading && (
               <div className="p-12 text-center">
                 <FiFileText className="text-4xl text-textSecondary mx-auto mb-4" />
                 <h3 className="text-lg font-bold mb-2">No claims found</h3>
@@ -841,23 +739,6 @@ export default function HospitalClaimsList() {
                 <p className="text-sm text-textSecondary">
                   Showing {filteredClaims.length} of {claims.length} claims
                 </p>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors disabled:opacity-50" disabled>
-                    Previous
-                  </button>
-                  <button className="px-3 py-1 bg-primary rounded-lg hover:bg-primary/90 transition-colors">
-                    1
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    2
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    3
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    Next
-                  </button>
-                </div>
               </div>
             )}
           </div>

@@ -22,20 +22,20 @@ export default function FileUploader({ onDrop }) {
       {...getRootProps()}
       className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
         isDragActive 
-          ? 'border-primary bg-primary/5' 
-          : 'border-gray-800 hover:border-primary/50'
+          ? 'border-blue-500 bg-blue-500/5' 
+          : 'border-gray-700 hover:border-blue-500/50'
       }`}
     >
       <input {...getInputProps()} />
-      <FiUploadCloud className="mx-auto text-4xl text-textSecondary mb-4" />
+      <FiUploadCloud className="mx-auto text-4xl text-gray-400 mb-4" />
       {isDragActive ? (
-        <p className="text-primary">Drop files here...</p>
+        <p className="text-blue-500">Drop files here...</p>
       ) : (
         <>
-          <p className="text-textSecondary">
+          <p className="text-gray-400">
             Drag & drop files here, or click to select
           </p>
-          <p className="text-xs text-textSecondary mt-2">
+          <p className="text-xs text-gray-500 mt-2">
             PDF, JPG, PNG, TXT (Max 10MB each)
           </p>
         </>
