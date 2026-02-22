@@ -5,12 +5,16 @@ import joblib
 import pandas as pd
 import os
 from datetime import datetime
+from ml_model import predict_fraud
+from risk_engine import calculate_risk
+from shap_explainer import explain_prediction
 
 # Import routers
 from auth import router as auth_router
 from claim_routes_clean import router as claim_router
 from dashboard_routes_clean import router as dashboard_router
 from company_trust_logic import router as company_router
+
 
 # Import database
 from database import init_db, Database
@@ -56,7 +60,7 @@ except Exception as e:
 async def startup_event():
     """Initialize database on startup"""
     try:
-        await init_db()
+        init_db()
         print("✅ Database connected")
     except Exception as e:
         print(f"⚠️ Database connection failed: {e}")
@@ -111,6 +115,7 @@ async def health_check():
         "model_loaded": model is not None
     }
 
+
 # -------------------------------
 # Test CORS endpoint
 # -------------------------------
@@ -118,43 +123,31 @@ async def health_check():
 async def test_cors():
     return {"message": "CORS is working!", "origin": "test"}
 
-# -------------------------------
-# Prediction Route
-# -------------------------------
+
 @app.post("/predict")
 async def predict(claim: dict):
-    """Predict fraud probability"""
-    global model
-    
-    try:
-        age = claim.get("patient_age", claim.get("age", 35))
-        amount = claim.get("claimed_amount", claim.get("amount", 5000))
-        
-        if model is not None:
-            df = pd.DataFrame([{"patient_age": age, "claimed_amount": amount}])
-            prob = model.predict_proba(df)[0][1]
-            pred = int(model.predict(df)[0])
-        else:
-            prob = min(amount / 100000, 0.5)
-            pred = 1 if prob > 0.5 else 0
-        
-        return {
-            "fraud_probability": float(prob),
-            "prediction": pred,
-            "risk_level": "high" if prob > 0.7 else "medium" if prob > 0.3 else "low",
-            "model_loaded": model is not None
-        }
-    except Exception as e:
-        return {"error": str(e), "fraud_probability": 0.0, "prediction": 0}
 
-# -------------------------------
-# Run Server
-# -------------------------------
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    try:
+        result = predict_fraud(claim)
+
+        risk_level = calculate_risk(result["fraud_probability"])
+
+        explanation = explain_prediction(
+            result["model"],
+            result["features_df"]
+        )
+
+        return {
+            "fraud_probability": result["fraud_probability"],
+            "prediction": result["prediction"],
+            "risk_level": risk_level,
+            "top_risk_factors": explanation,
+            "model_loaded": True
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "fraud_probability": 0.0,
+            "prediction": 0
+        }

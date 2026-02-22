@@ -11,9 +11,9 @@ from database import get_users_collection
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+SECRET_KEY = "insurance_claims_ai_super_secure_jwt_secret_key_2026"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 class LoginRequest(BaseModel):
     email: EmailStr
