@@ -4,7 +4,7 @@ import Button from '../../components/Button';
 import FileUploader from '../../components/FileUploader';
 import { FiArrowLeft, FiCalendar, FiDollarSign, FiUser, FiActivity, FiFileText, FiAlertCircle } from 'react-icons/fi';
 import { submitClaim } from '../../services/claims';
-import { getRiskScore } from '../../services/risk';
+
 
 export default function UserSubmitClaim() {
   const navigate = useNavigate();
@@ -22,8 +22,7 @@ export default function UserSubmitClaim() {
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
-  const [mlRiskScore, setMlRiskScore] = useState(null);
-  const [isCalculatingRisk, setIsCalculatingRisk] = useState(false);
+  
 
   const diseases = [
     'Select Disease',
@@ -45,7 +44,7 @@ export default function UserSubmitClaim() {
       setErrors(prev => ({ ...prev, [name]: null }));
     }
     // Reset ML risk score when form changes
-    setMlRiskScore(null);
+    //setMlRiskScore(null);
   };
 
   const handleFileDrop = (acceptedFiles) => {
@@ -85,75 +84,12 @@ export default function UserSubmitClaim() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const calculateRiskScore = async () => {
-    setIsCalculatingRisk(true);
-    setSubmitError('');
-    
-    try {
-      console.log('Calculating risk for:', {
-        age: parseInt(formData.age),
-        amount: parseFloat(formData.amount),
-        disease: formData.disease
-      });
-
-      const riskData = await getRiskScore({
-        age: parseInt(formData.age),
-        amount: parseFloat(formData.amount),
-        disease: formData.disease,
-        admissionDate: formData.admissionDate,
-        dischargeDate: formData.dischargeDate
-      });
-      
-      console.log('Risk data received:', riskData);
-      
-      // Ensure factors is always an array
-      const safeRiskData = {
-        ...riskData,
-        factors: riskData?.factors || [],
-        score: riskData?.score || 30,
-        confidence: riskData?.confidence || 0.7
-      };
-      
-      setMlRiskScore(safeRiskData);
-      return safeRiskData;
-    } catch (error) {
-      console.error('Risk calculation failed details:', error);
-      
-      // Create safe fallback data
-      const amount = parseFloat(formData.amount) || 5000;
-      const age = parseInt(formData.age) || 35;
-      
-      let score = 30;
-      if (amount > 50000) score += 30;
-      else if (amount > 25000) score += 20;
-      else if (amount > 10000) score += 10;
-      
-      if (age > 70) score += 15;
-      else if (age > 60) score += 10;
-      
-      const fallbackScore = {
-        score: Math.min(score, 95),
-        factors: [
-          { name: 'Claim Amount', impact: amount > 25000 ? 42 : 28, description: amount > 25000 ? 'High amount' : 'Normal range' },
-          { name: 'Patient Age', impact: age > 60 ? 35 : 18, description: age > 60 ? 'Senior citizen' : 'Standard age' },
-          { name: 'Duration', impact: 25, description: 'Standard processing' }
-        ],
-        confidence: 0.75
-      };
-      
-      setMlRiskScore(fallbackScore);
-      return fallbackScore;
-    } finally {
-      setIsCalculatingRisk(false);
-    }
-  };
 
   const nextStep = async () => {
     if (currentStep === 1 && validateStep1()) {
       setCurrentStep(2);
     } else if (currentStep === 2 && validateStep2()) {
-      // Calculate ML risk score before moving to step 3
-      await calculateRiskScore();
+      
       setCurrentStep(3);
     }
   };
@@ -166,56 +102,39 @@ export default function UserSubmitClaim() {
 
   const handleSubmit = async (e) => {
   e.preventDefault();
-  
+
   if (currentStep === 3) {
     setIsSubmitting(true);
     setSubmitError('');
 
     try {
-      // Calculate duration days
-      const start = new Date(formData.admissionDate);
-      const end = new Date(formData.dischargeDate);
-      const durationDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-
-      // Prepare claim data matching backend schema
       const claimData = {
         age: parseInt(formData.age),
         disease: formData.disease,
-        admissionDate: formData.admissionDate,
-        dischargeDate: formData.dischargeDate,
-        amount: parseFloat(formData.amount),
-        fullName: formData.fullName,
-        durationDays: durationDays,
-        riskScore: mlRiskScore?.score || 30,
-        riskFactors: mlRiskScore?.factors || [],
-        status: mlRiskScore?.score > 70 ? 'Flagged' : 
-                mlRiskScore?.score > 50 ? 'AI Processing' : 'Submitted',
-        hospital: 'City General Hospital'
+        admission_date: formData.admissionDate,
+        discharge_date: formData.dischargeDate,
+        claim_amount: parseFloat(formData.amount),
+        patient_name: formData.fullName,
+        hospital_name: 'City General Hospital',
+        gender: "M" // or add gender field later properly
       };
 
-      console.log('Submitting claim:', claimData);
-
-      // Submit to backend
       const result = await submitClaim(claimData);
-      
-      console.log('Submit result:', result);
-      
-      // Show success and redirect
-      navigate('/user/claims', { 
-        state: { 
-          message: `Claim submitted successfully! Risk Score: ${result.risk_score ?? 'N/A'}`,
-          claimId: result.claim_id || result.id
-        } 
+
+      navigate('/user/claims', {
+        state: {
+          message: "Claim submitted successfully!",
+          claimId: result.claimId
+        }
       });
+
     } catch (error) {
-      console.error('Submission error details:', error);
-      setSubmitError(error.message || 'Failed to submit claim. Please try again.');
+      setSubmitError(error.message || 'Failed to submit claim.');
     } finally {
       setIsSubmitting(false);
     }
   }
 };
-
   // Calculate stay duration for display
   const getStayDuration = () => {
     if (formData.admissionDate && formData.dischargeDate) {
@@ -449,9 +368,9 @@ export default function UserSubmitClaim() {
                 <Button 
                   type="button" 
                   onClick={nextStep}
-                  disabled={isCalculatingRisk}
+                  
                 >
-                  {isCalculatingRisk ? 'Analyzing with ML...' : 'Next Step →'}
+                  Next Step →
                 </Button>
               </div>
             </div>
@@ -460,70 +379,7 @@ export default function UserSubmitClaim() {
           {/* Step 3: Document Upload & ML Review */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              {/* ML Risk Score Display */}
-              {mlRiskScore && (
-                <div className={`bg-gray-800 p-6 rounded-xl border ${
-                  mlRiskScore.score > 70 ? 'border-red-500' :
-                  mlRiskScore.score > 50 ? 'border-yellow-500' : 'border-green-500'
-                }`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold">ML Risk Analysis</h2>
-                    <div className={`px-3 py-1 rounded-full text-sm ${
-                      mlRiskScore.score > 70 ? 'bg-red-500/20 text-red-500' :
-                      mlRiskScore.score > 50 ? 'bg-yellow-500/20 text-yellow-500' :
-                      'bg-green-500/20 text-green-500'
-                    }`}>
-                      Confidence: {Math.round((mlRiskScore.confidence || 0.7) * 100)}%
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className={`text-3xl font-bold font-mono ${
-                      mlRiskScore.score > 70 ? 'text-red-500' :
-                      mlRiskScore.score > 50 ? 'text-yellow-500' : 'text-green-500'
-                    }`}>
-                      {mlRiskScore.score || 0}
-                    </div>
-                    <div className="flex-1">
-                      <div className="w-full bg-gray-900 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            mlRiskScore.score > 70 ? 'bg-red-500' :
-                            mlRiskScore.score > 50 ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}
-                          style={{ width: `${mlRiskScore.score || 0}%` }}
-                        ></div>
-                      </div>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {mlRiskScore.score > 70 ? 'High Risk - Will be flagged for review' :
-                         mlRiskScore.score > 50 ? 'Medium Risk - Additional verification needed' :
-                         'Low Risk - Likely to be approved'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Risk Factors - SAFE VERSION with null check */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Key Factors:</p>
-                    {mlRiskScore.factors && mlRiskScore.factors.length > 0 ? (
-                      mlRiskScore.factors.map((factor, index) => (
-                        <div key={index} className="flex justify-between text-sm">
-                          <span className="text-gray-400">{factor?.name || 'Unknown factor'}</span>
-                          <span className={
-                            (factor?.impact || 0) > 30 ? 'text-red-500' :
-                            (factor?.impact || 0) > 15 ? 'text-yellow-500' : 'text-green-500'
-                          }>
-                            {factor?.impact || 0}% influence
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-400">No risk factors available</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
+              
               {/* Document Upload */}
               <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -584,15 +440,10 @@ export default function UserSubmitClaim() {
                   type="submit" 
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit Claim for ML Verification'}
+                  Submit Claim
                 </Button>
               </div>
-
-              {/* ML Processing Note */}
-              <p className="text-xs text-gray-400 text-center">
-                Your claim will be processed by our AI model for fraud detection and risk assessment
-              </p>
-            </div>
+              </div>
           )}
         </form>
       </main>
