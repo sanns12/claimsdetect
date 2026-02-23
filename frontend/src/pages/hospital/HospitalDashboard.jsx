@@ -78,13 +78,13 @@ export default function HospitalDashboard() {
       // Get dashboard stats
       const statsData = await getHospitalDashboardStats();
       setStats({
-        totalClaims: statsData.total_claims || 156,
-        pendingReview: statsData.pending_review || 23,
-        approved: statsData.approved || 98,
-        flagged: statsData.flagged || 28,
-        fraud: statsData.fraud || 7,
-        totalAmount: statsData.total_amount || '$1.2M',
-        avgProcessingTime: statsData.avg_processing_time || '2.4 days'
+        totalClaims: statsData.total_claims || 0,
+        pendingReview: statsData.pending_review || 0,
+        approved: statsData.approved || 0,
+        flagged: statsData.flagged || 0,
+        fraud: statsData.fraud || 0,
+        totalAmount: statsData.total_amount || 0,
+        avgProcessingTime: statsData.avg_processing_time || '0 days'
       });
 
       // Get recent claims - handle gracefully if endpoint doesn't exist
@@ -108,17 +108,6 @@ export default function HospitalDashboard() {
     } catch (err) {
       console.error('Failed to load dashboard:', err);
       setError('Failed to load dashboard data. Please refresh.');
-      
-      // Fallback to mock data
-      setStats({
-        totalClaims: 156,
-        pendingReview: 23,
-        approved: 98,
-        flagged: 28,
-        fraud: 7,
-        totalAmount: '$1.2M',
-        avgProcessingTime: '2.4 days'
-      });
     } finally {
       setLoading(false);
     }
@@ -263,7 +252,7 @@ export default function HospitalDashboard() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-textSecondary text-sm">Total Amount</p>
-                <p className="text-3xl font-bold mt-2 text-success">{stats.totalAmount}</p>
+                <p className="text-3xl font-bold mt-2 text-success">${Number(stats.totalAmount || 0).toLocaleString()}</p>
                 <p className="text-xs text-textSecondary mt-2">Processed</p>
               </div>
               <div className="p-3 bg-success/20 rounded-lg">
@@ -294,7 +283,7 @@ export default function HospitalDashboard() {
               <div>
                 <p className="text-textSecondary text-sm">Approval Rate</p>
                 <p className="text-3xl font-bold mt-2">
-                  {Math.round((stats.approved / stats.totalClaims) * 100)}%
+                  {stats.totalClaims > 0 ? Math.round((stats.approved / stats.totalClaims) * 100) : 0}%
                 </p>
                 <p className="text-xs text-success mt-2">↑ 8% from last month</p>
               </div>

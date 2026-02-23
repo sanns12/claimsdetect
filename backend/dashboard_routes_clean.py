@@ -8,9 +8,11 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 async def get_dashboard_stats(current_user = Depends(get_current_user)):
     claims_collection = await get_claims_collection()
 
-    user_claims = claims_collection.find({
-        "user_id": current_user["id"]
-    }, limit=None)
+    query = {}
+    if current_user.get("role") != "insurance":
+        query["user_id"] = current_user["id"]
+
+    user_claims = claims_collection.find(query, limit=None)
 
     total = len(user_claims)
 
@@ -21,13 +23,20 @@ async def get_dashboard_stats(current_user = Depends(get_current_user)):
         c for c in user_claims
         if c["status"] in ["Submitted", "AI Processing", "Manual Review"]
     ])
+    total_amount = sum(float(c.get("claim_amount") or 0) for c in user_claims)
+    avg_fraud_probability = (
+        sum(float(c.get("fraud_probability") or 0) for c in user_claims) / total
+        if total > 0 else 0
+    )
 
     return {
         "total_claims": total,
         "approved": approved,
         "flagged": flagged,
         "fraud": fraud,
-        "pending_review": pending
+        "pending_review": pending,
+        "total_amount": total_amount,
+        "fraud_probability": round(avg_fraud_probability, 4)
     }
 
 @router.get("/fraud-trends")
