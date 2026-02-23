@@ -21,27 +21,25 @@ export const getClaimById = async (claimId) => {
 };
 
 // Submit a new claim with documents
-export const submitClaim = async (claimData) => {
-  try {
-    // Format data to match backend ClaimSubmission schema
-    const formattedData = {
-      age: parseInt(claimData.age) || 0,
-      disease: claimData.disease || '',
-      admission_date: claimData.admissionDate || claimData.admission_date || '',
-      discharge_date: claimData.dischargeDate || claimData.discharge_date || '',
-      claim_amount: parseFloat(claimData.amount || claimData.claim_amount) || 0,
-      patient_name: claimData.fullName || claimData.patient_name || '',
-      hospital_name: claimData.hospital || claimData.hospital_name || 'City General Hospital',
-    };
-
-    console.log('Submitting claim with data:', formattedData);
-
-    const response = await API.post('/claims/submit', formattedData);
-    return response.data;
-  } catch (error) {
-    console.error('Submit claim error:', error.response?.data || error);
-    throw error.response?.data || { message: 'Claim submission failed' };
+// Submit a new claim with documents (OCR ENABLED)
+export const submitClaim = async (claimData, file) => {
+  if (!file) {
+    throw { message: "Supporting document is required." };
   }
+
+  const formData = new FormData();
+
+  formData.append("patient_name", claimData.patient_name);
+  formData.append("age", claimData.age);
+  formData.append("disease", claimData.disease);
+  formData.append("admission_date", claimData.admission_date);
+  formData.append("discharge_date", claimData.discharge_date);
+  formData.append("claim_amount", claimData.claim_amount);
+  formData.append("hospital_name", claimData.hospital_name);
+  formData.append("supporting_file", file);
+
+  const response = await API.post("/claims/submit", formData);
+  return response.data;
 };
 // Delete claim
 export const deleteClaim = async (claimId) => {
