@@ -119,7 +119,7 @@ export default function UserSubmitClaim() {
         gender: "M" // or add gender field later properly
       };
 
-      const result = await submitClaim(claimData);
+      const result = await submitClaim(claimData, files[0]);
 
       navigate('/user/claims', {
         state: {
