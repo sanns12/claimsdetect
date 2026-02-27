@@ -12,6 +12,9 @@ from typing import Dict, Any
 # Path to the trained model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "xgboost_fraud_model.pkl")
 
+# Path to your actual XGBoost model in models folder
+XGB_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "xgboost_model.pkl")
+
 # Global model instance
 _model = None
 
@@ -19,11 +22,16 @@ def load_model():
     """Load the trained XGBoost model"""
     global _model
     try:
+        # Try primary path (xgboost_fraud_model.pkl)
         if os.path.exists(MODEL_PATH):
             _model = joblib.load(MODEL_PATH)
-            print("✅ XGBoost model loaded successfully")
+            print(f"✅ XGBoost model loaded successfully from {MODEL_PATH}")
+        # Try your actual XGBoost model (xgboost_model.pkl)
+        elif os.path.exists(XGB_MODEL_PATH):
+            _model = joblib.load(XGB_MODEL_PATH)
+            print(f"✅ XGBoost model loaded successfully from {XGB_MODEL_PATH}")
         else:
-            print(f"⚠️ Model not found at {MODEL_PATH}. Using fallback prediction.")
+            print(f"⚠️ Model not found. Tried: {MODEL_PATH} and {XGB_MODEL_PATH}. Using fallback prediction.")
             _model = None
     except Exception as e:
         print(f"❌ Error loading model: {e}")
@@ -190,6 +198,11 @@ def batch_predict(claims_data: list) -> list:
     for claim in claims_data:
         results.append(predict_fraud(claim))
     return results
+
+def get_model():
+    """Return the loaded model instance"""
+    global _model
+    return _model
 
 # Load model when module is imported
 load_model()

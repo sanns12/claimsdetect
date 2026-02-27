@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from database import get_companies_collection, get_claims_collection
 from auth import get_current_user
 from models import CompanyTrust, TrustLevel
+# Import ML model
+from ml_model import predict_fraud
 
 router = APIRouter(prefix="/companies", tags=["Companies"])
 
@@ -37,7 +39,8 @@ async def calculate_trust_score(hospital_id: str) -> dict:
                     "$sum": {"$cond": [{"$eq": ["$status", "Approved"]}, 1, 0]}
                 },
                 "total_amount": {"$sum": "$claim_amount"},
-                "avg_risk": {"$avg": "$risk_score"}
+                "avg_risk": {"$avg": "$risk_score"},
+                "avg_ml_fraud_probability": {"$avg": "$fraud_probability"}  # Add ML average
             }
         }
     ]
@@ -53,7 +56,8 @@ async def calculate_trust_score(hospital_id: str) -> dict:
             "flagged_cases": 0,
             "approved_cases": 0,
             "total_amount": 0,
-            "avg_risk": 0
+            "avg_risk": 0,
+            "avg_ml_fraud_probability": 0
         }
     
     return stats[0]
@@ -101,10 +105,20 @@ async def get_all_companies(
         
         fraud_rate = (stats["fraud_cases"] / stats["total_claims"] * 100) if stats["total_claims"] > 0 else 0
         
-        # Calculate trust score
+        # Calculate trust score - now using ML probabilities
         base_score = 100
-        base_score -= fraud_rate * 2  # Deduct for fraud
-        base_score -= (stats["flagged_cases"] / max(stats["total_claims"], 1)) * 10  # Deduct for flags
+        
+        # Deduct based on actual fraud cases
+        base_score -= fraud_rate * 2
+        
+        # Deduct based on flagged cases
+        base_score -= (stats["flagged_cases"] / max(stats["total_claims"], 1)) * 10
+        
+        # Deduct based on average ML fraud probability
+        if stats.get("avg_ml_fraud_probability", 0) > 0:
+            ml_deduction = stats["avg_ml_fraud_probability"] * 30  # Scale ML impact
+            base_score -= ml_deduction
+        
         base_score = max(min(base_score, 100), 0)  # Clamp between 0-100
         
         trust_level = determine_trust_level(base_score)
@@ -125,10 +139,12 @@ async def get_all_companies(
             "fraudRate": f"{fraud_rate:.1f}%",
             "flaggedClaims": stats["flagged_cases"],
             "approvedClaims": stats["approved_cases"],
+            "avgMLFraudProbability": f"{stats.get('avg_ml_fraud_probability', 0)*100:.1f}%" if stats.get('avg_ml_fraud_probability') else "0%",
             "avgProcessingTime": "2.4 days",  # Mock data
             "riskTrend": trend,
             "lastIncident": (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d") if stats["fraud_cases"] > 0 else None,
             "riskFactors": [
+                {"name": "ML Fraud Score", "score": round((1 - stats.get('avg_ml_fraud_probability', 0)) * 100, 1)},
                 {"name": "Documentation Quality", "score": round(base_score * 0.95, 1)},
                 {"name": "Billing Accuracy", "score": round(base_score * 0.92, 1)},
                 {"name": "Claim Pattern", "score": round(base_score * 0.88, 1)}
@@ -153,10 +169,15 @@ async def get_company_by_id(
     
     fraud_rate = (stats["fraud_cases"] / stats["total_claims"] * 100) if stats["total_claims"] > 0 else 0
     
-    # Calculate trust score
+    # Calculate trust score - now using ML probabilities
     base_score = 100
     base_score -= fraud_rate * 2
     base_score -= (stats["flagged_cases"] / max(stats["total_claims"], 1)) * 10
+    
+    if stats.get("avg_ml_fraud_probability", 0) > 0:
+        ml_deduction = stats["avg_ml_fraud_probability"] * 30
+        base_score -= ml_deduction
+    
     base_score = max(min(base_score, 100), 0)
     
     trust_level = determine_trust_level(base_score)
@@ -184,7 +205,8 @@ async def get_company_by_id(
                 },
                 "flagged": {
                     "$sum": {"$cond": [{"$eq": ["$status", "Flagged"]}, 1, 0]}
-                }
+                },
+                "avg_ml_prob": {"$avg": "$fraud_probability"}
             }
         },
         {"$sort": {"_id.year": 1, "_id.month": 1}}
@@ -201,7 +223,8 @@ async def get_company_by_id(
             "month": months_names[stat["_id"]["month"] - 1],
             "claims": stat["claims"],
             "fraud": stat["fraud"],
-            "flagged": stat["flagged"]
+            "flagged": stat["flagged"],
+            "avgMLProbability": f"{stat.get('avg_ml_prob', 0)*100:.1f}%"
         })
     
     return {
@@ -216,9 +239,11 @@ async def get_company_by_id(
         "fraudRate": f"{fraud_rate:.1f}%",
         "flaggedClaims": stats["flagged_cases"],
         "approvedClaims": stats["approved_cases"],
+        "avgMLFraudProbability": f"{stats.get('avg_ml_fraud_probability', 0)*100:.1f}%" if stats.get('avg_ml_fraud_probability') else "0%",
         "avgProcessingTime": "2.4 days",
         "monthlyHistory": history,
         "riskFactors": [
+            {"name": "ML Fraud Score", "score": round((1 - stats.get('avg_ml_fraud_probability', 0)) * 100, 1)},
             {"name": "Documentation Quality", "score": round(base_score * 0.95, 1)},
             {"name": "Billing Accuracy", "score": round(base_score * 0.92, 1)},
             {"name": "Claim Pattern", "score": round(base_score * 0.88, 1)}
@@ -245,6 +270,11 @@ async def get_company_trust_score(
     base_score = 100
     base_score -= fraud_rate * 2
     base_score -= (stats["flagged_cases"] / max(stats["total_claims"], 1)) * 10
+    
+    if stats.get("avg_ml_fraud_probability", 0) > 0:
+        ml_deduction = stats["avg_ml_fraud_probability"] * 30
+        base_score -= ml_deduction
+    
     base_score = max(min(base_score, 100), 0)
     
     trust_level = determine_trust_level(base_score)
@@ -254,6 +284,7 @@ async def get_company_trust_score(
         "trust_score": round(base_score, 1),
         "trust_level": trust_level.value,
         "fraud_rate": fraud_rate,
+        "avg_ml_fraud_probability": stats.get("avg_ml_fraud_probability", 0),
         "total_claims": stats["total_claims"]
     }
 
@@ -277,9 +308,13 @@ async def get_high_risk_companies(
             
         fraud_rate = (stats["fraud_cases"] / stats["total_claims"] * 100)
         
-        # Calculate risk score (inverse of trust)
+        # Calculate risk score using ML as well
         risk_score = 100
         risk_score -= (100 - fraud_rate * 2)
+        
+        if stats.get("avg_ml_fraud_probability", 0) > 0:
+            risk_score += stats["avg_ml_fraud_probability"] * 30
+        
         risk_score = max(min(risk_score, 100), 0)
         
         if risk_score > 60:  # High risk threshold
@@ -288,7 +323,8 @@ async def get_high_risk_companies(
                 "name": company["hospital_name"],
                 "risk": round(risk_score, 1),
                 "claims": stats["total_claims"],
-                "fraudRate": f"{fraud_rate:.1f}%"
+                "fraudRate": f"{fraud_rate:.1f}%",
+                "mlFraudProbability": f"{stats.get('avg_ml_fraud_probability', 0)*100:.1f}%"
             })
     
     # Sort by risk score descending
@@ -370,7 +406,8 @@ async def get_company_claim_history(
                 },
                 "flagged": {
                     "$sum": {"$cond": [{"$eq": ["$status", "Flagged"]}, 1, 0]}
-                }
+                },
+                "avg_ml_prob": {"$avg": "$fraud_probability"}
             }
         },
         {"$sort": {"_id.year": 1, "_id.month": 1, "_id.day": 1}}
@@ -386,7 +423,8 @@ async def get_company_claim_history(
             "claims": item["claims"],
             "amount": item["total_amount"],
             "fraud": item["fraud"],
-            "flagged": item["flagged"]
+            "flagged": item["flagged"],
+            "avgMLProbability": f"{item.get('avg_ml_prob', 0)*100:.1f}%"
         })
     
     return formatted_history

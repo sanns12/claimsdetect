@@ -314,4 +314,5 @@ class Database:
     
     @classmethod
     async def close_db(cls):
-        close_db()
+        """Close database connection"""
+        close_db()  # Call the synchronous close_db function

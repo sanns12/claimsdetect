@@ -12,8 +12,9 @@ from claim_routes_clean import router as claim_router
 from dashboard_routes_clean import router as dashboard_router
 from company_trust_logic import router as company_router
 
-# Import database
-from database import init_db, Database
+# Import database and ML model
+from database import init_db, Database, seed_database
+from ml_model import load_model, predict_fraud, get_model
 
 app = FastAPI(title="Insurance Claims API", version="1.0.0")
 
@@ -35,31 +36,39 @@ app.add_middleware(
 )
 
 # -------------------------------
-# Load Trained Model Once
+# Load Trained Model Once (using ml_model.py)
 # -------------------------------
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "xgboost_fraud_model.pkl")
 model = None
 
-try:
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        print(f"✅ Model loaded successfully from {MODEL_PATH}")
-    else:
-        print(f"⚠️ Model not found at {MODEL_PATH}")
-except Exception as e:
-    print(f"❌ Error loading model: {e}")
-
-# -------------------------------
-# Startup Event
-# -------------------------------
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup"""
+    """Initialize database and load model on startup"""
+    global model
+    
+    # Initialize database tables (init_db is synchronous)
     try:
-        await init_db()
+        init_db()  # Remove await, it's not async
+        print("✅ Database initialized with schema")
+        
+        # Seed the database with initial data
+        seed_database()
+        print("✅ Database seeded with sample data")
         print("✅ Database connected")
     except Exception as e:
-        print(f"⚠️ Database connection failed: {e}")
+        print(f"⚠️ Database initialization failed: {e}")
+    
+    # Load ML model using ml_model.py
+    try:
+        load_model()  # This loads the model into ml_model._model
+        model = get_model()  # Get the loaded model instance
+        if model is not None:
+            print("✅ ML Model loaded successfully via ml_model.py")
+        else:
+            print("⚠️ ML Model could not be loaded")
+    except Exception as e:
+        print(f"❌ Error loading ML model: {e}")
+        model = None
+    
     print("✅ Server starting on http://localhost:8000")
 
 # -------------------------------
@@ -69,7 +78,10 @@ async def startup_event():
 async def shutdown_event():
     """Close database connection on shutdown"""
     try:
-        await Database.close_db()
+        # Run the synchronous close_db in a thread pool
+        import asyncio
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, Database.close_db)
         print("✅ Database connection closed")
     except Exception as e:
         print(f"⚠️ Error closing database: {e}")
@@ -104,11 +116,13 @@ async def home():
 # -------------------------------
 @app.get("/health")
 async def health_check():
+    # Get current model status from ml_model
+    from ml_model import _model
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "database": "connected",
-        "model_loaded": model is not None
+        "model_loaded": _model is not None
     }
 
 # -------------------------------
@@ -119,33 +133,27 @@ async def test_cors():
     return {"message": "CORS is working!", "origin": "test"}
 
 # -------------------------------
-# Prediction Route
+# Prediction Route - Now using ml_model.py
 # -------------------------------
 @app.post("/predict")
 async def predict(claim: dict):
-    """Predict fraud probability"""
-    global model
-    
+    """Predict fraud probability using ml_model.py"""
     try:
-        age = claim.get("patient_age", claim.get("age", 35))
-        amount = claim.get("claimed_amount", claim.get("amount", 5000))
-        
-        if model is not None:
-            df = pd.DataFrame([{"patient_age": age, "claimed_amount": amount}])
-            prob = model.predict_proba(df)[0][1]
-            pred = int(model.predict(df)[0])
-        else:
-            prob = min(amount / 100000, 0.5)
-            pred = 1 if prob > 0.5 else 0
-        
-        return {
-            "fraud_probability": float(prob),
-            "prediction": pred,
-            "risk_level": "high" if prob > 0.7 else "medium" if prob > 0.3 else "low",
-            "model_loaded": model is not None
-        }
+        # Use the predict_fraud function from ml_model.py
+        result = predict_fraud({
+            "patient_age": claim.get("patient_age", claim.get("age", 35)),
+            "claimed_amount": claim.get("claimed_amount", claim.get("amount", 5000))
+        })
+        return result
     except Exception as e:
-        return {"error": str(e), "fraud_probability": 0.0, "prediction": 0}
+        print(f"❌ Prediction error: {e}")
+        return {
+            "error": str(e),
+            "fraud_probability": 0.0,
+            "prediction": 0,
+            "risk_level": "unknown",
+            "model_loaded": False
+        }
 
 # -------------------------------
 # Run Server

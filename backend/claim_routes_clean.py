@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import Optional
 
 from auth import get_current_user
+# Import ML model
+from ml_model import predict_fraud
 
 router = APIRouter(prefix="/claims", tags=["Claims"])
 
@@ -29,32 +31,33 @@ async def submit_claim(claim_data: dict, current_user: dict = Depends(get_curren
         except:
             duration = 1
         
-        # Simple risk calculation
+        # Use ML model for fraud prediction
         amount = float(claim_data.get("claim_amount", 0))
         age = int(claim_data.get("age", 35))
         
-        risk_score = 30
-        if amount > 50000:
-            risk_score = 85
-        elif amount > 25000:
-            risk_score = 70
-        elif amount > 10000:
-            risk_score = 50
+        # Call XGBoost model
+        ml_result = predict_fraud({
+            "patient_age": age,
+            "claimed_amount": amount
+        })
         
-        if age > 70:
-            risk_score += 10
-        elif age < 18:
-            risk_score += 5
+        # Get fraud probability and convert to risk score (0-100)
+        fraud_probability = ml_result.get("fraud_probability", 0)
+        risk_score = int(fraud_probability * 100)  # Convert 0-1 to 0-100
         
-        risk_score = min(risk_score, 95)
+        # Use ML prediction for status determination
+        prediction = ml_result.get("prediction", 0)  # 0=genuine, 1=fraud
         
-        # Determine status
-        if risk_score > 80:
+        # Determine status based on ML prediction
+        if prediction == 1 or risk_score > 70:
             status = "Flagged"
-        elif risk_score > 60:
+            print(f"🚨 ML model flagged claim as potential fraud (score: {risk_score})")
+        elif risk_score > 50:
             status = "AI Processing"
+            print(f"🤖 ML model requires AI processing (score: {risk_score})")
         else:
             status = "Submitted"
+            print(f"✅ ML model approved claim (score: {risk_score})")
         
         # Create claim
         new_claim = {
@@ -68,14 +71,16 @@ async def submit_claim(claim_data: dict, current_user: dict = Depends(get_curren
             "discharge_date": claim_data.get("discharge_date", ""),
             "duration_days": duration,
             "claim_amount": amount,
-            "risk_score": risk_score,  # This is the key field
+            "risk_score": risk_score,  # This is now from ML model
+            "fraud_probability": fraud_probability,  # Store raw probability
+            "prediction": prediction,  # Store ML prediction
             "status": status,
             "hospital_name": claim_data.get("hospital_name", "City General Hospital"),
             "created_at": datetime.utcnow().isoformat()
         }
         
         claims_db.append(new_claim)
-        print(f"✅ Claim created: CLM{next_id:03d} with risk score: {risk_score}")
+        print(f"✅ Claim created: CLM{next_id:03d} with ML risk score: {risk_score}")
         
         next_id += 1
         
@@ -83,6 +88,8 @@ async def submit_claim(claim_data: dict, current_user: dict = Depends(get_curren
             "claimId": f"CLM{new_claim['id']:03d}",
             "status": status,
             "riskScore": risk_score,
+            "fraudProbability": fraud_probability,
+            "modelLoaded": ml_result.get("model_loaded", False),
             "message": "Claim submitted successfully"
         }
         
@@ -155,7 +162,7 @@ async def get_claims(
                 "risk": risk,
                 "risk_score": risk,
                 "fraudScore": risk / 100,
-                "fraud_probability": risk / 100,
+                "fraud_probability": claim.get("fraud_probability", risk / 100),
                 "hospital": claim.get("hospital_name", "Unknown Hospital"),
                 "hospital_name": claim.get("hospital_name", "Unknown Hospital"),
                 "department": claim.get("department", "General"),
@@ -226,6 +233,7 @@ async def get_claim(claim_id: str, current_user: dict = Depends(get_current_user
                 "claim_amount": f"${claim['claim_amount']:,.0f}",
                 "status": claim["status"],
                 "risk_score": claim["risk_score"],
+                "fraud_probability": claim.get("fraud_probability", claim["risk_score"] / 100),
                 "hospital": claim["hospital_name"],
                 "created_at": claim["created_at"]
             }
@@ -298,6 +306,8 @@ async def add_test_claims(current_user: dict = Depends(get_current_user)):
             "hospital_name": "City General Hospital",
             "status": "Flagged",
             "risk_score": 78,
+            "fraud_probability": 0.78,
+            "prediction": 1,
             "user_id": 1
         },
         {
@@ -310,6 +320,8 @@ async def add_test_claims(current_user: dict = Depends(get_current_user)):
             "hospital_name": "MediCare Plus Clinic",
             "status": "Fraud",
             "risk_score": 92,
+            "fraud_probability": 0.92,
+            "prediction": 1,
             "user_id": 2
         },
         {
@@ -322,130 +334,8 @@ async def add_test_claims(current_user: dict = Depends(get_current_user)):
             "hospital_name": "HealthFirst Medical",
             "status": "Approved",
             "risk_score": 28,
-            "user_id": 1
-        }
-    ]
-    
-    added = []
-    for tc in test_claims:
-        tc["id"] = next_id
-        tc["claim_number"] = f"CLM{next_id:03d}"
-        tc["created_at"] = datetime.utcnow().isoformat()
-        claims_db.append(tc)
-        added.append(f"CLM{next_id:03d}")
-        next_id += 1
-    
-    return {
-        "message": f"Added {len(added)} test claims",
-        "claims": added,
-        "total_claims": len(claims_db)
-    }
-
-@router.post("/debug/add-test-claims")
-async def add_test_claims(current_user: dict = Depends(get_current_user)):
-    """Add test claims for debugging"""
-    global next_id, claims_db
-    
-    if current_user.get("role") != "insurance":
-        return {"error": "Only insurance can add test claims"}
-    
-    test_claims = [
-        {
-            "patient_name": "John Smith",
-            "age": 45,
-            "disease": "Cardiovascular",
-            "admission_date": "2024-03-15",
-            "discharge_date": "2024-03-20",
-            "claim_amount": 25000,
-            "hospital_name": "City General Hospital",
-            "status": "Flagged",
-            "risk_score": 78,
-            "user_id": 1
-        },
-        {
-            "patient_name": "Emma Wilson",
-            "age": 62,
-            "disease": "Oncology",
-            "admission_date": "2024-03-10",
-            "discharge_date": "2024-03-25",
-            "claim_amount": 75000,
-            "hospital_name": "MediCare Plus Clinic",
-            "status": "Fraud",
-            "risk_score": 92,
-            "user_id": 2
-        },
-        {
-            "patient_name": "Robert Brown",
-            "age": 34,
-            "disease": "Orthopedic",
-            "admission_date": "2024-03-18",
-            "discharge_date": "2024-03-22",
-            "claim_amount": 12000,
-            "hospital_name": "HealthFirst Medical",
-            "status": "Approved",
-            "risk_score": 28,
-            "user_id": 1
-        }
-    ]
-    
-    added = []
-    for tc in test_claims:
-        tc["id"] = next_id
-        tc["claim_number"] = f"CLM{next_id:03d}"
-        tc["created_at"] = datetime.utcnow().isoformat()
-        claims_db.append(tc)
-        added.append(f"CLM{next_id:03d}")
-        next_id += 1
-    
-    return {
-        "message": f"Added {len(added)} test claims",
-        "claims": added,
-        "total_claims": len(claims_db)
-    }
-    
-@router.post("/debug/add-test-claims")
-async def add_test_claims(current_user: dict = Depends(get_current_user)):
-    """Add test claims for debugging"""
-    global next_id, claims_db
-    
-    if current_user.get("role") != "insurance":
-        return {"error": "Only insurance can add test claims"}
-    
-    test_claims = [
-        {
-            "patient_name": "John Smith",
-            "age": 45,
-            "disease": "Cardiovascular",
-            "admission_date": "2024-03-15",
-            "discharge_date": "2024-03-20",
-            "claim_amount": 25000,
-            "hospital_name": "City General Hospital",
-            "status": "Flagged",
-            "risk_score": 78,
-            "user_id": 1
-        },
-        {
-            "patient_name": "Emma Wilson",
-            "age": 62,
-            "disease": "Oncology",
-            "admission_date": "2024-03-10",
-            "discharge_date": "2024-03-25",
-            "claim_amount": 75000,
-            "hospital_name": "MediCare Plus Clinic",
-            "status": "Fraud",
-            "risk_score": 92,
-            "user_id": 2
-        },
-        {
-            "patient_name": "Robert Brown",
-            "age": 34,
-            "disease": "Orthopedic",
-            "admission_date": "2024-03-18",
-            "discharge_date": "2024-03-22",
-            "claim_amount": 12000,
-            "hospital_name": "HealthFirst Medical",
-            "status": "Approved",
-            "risk_score": 28,
+            "fraud_probability": 0.28,
+            "prediction": 0,
             "user_id": 1
         }
     ]
