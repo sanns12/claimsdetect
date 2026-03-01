@@ -27,4 +27,4 @@ class Config:
     MISMATCH_PENALTY = 0.2
     
     # Stub mode flag (set to False when real implementation is ready)
-    STUB_MODE = True
+    STUB_MODE = False
