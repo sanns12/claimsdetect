@@ -1,0 +1,9 @@
+total_claims: 717031
+fraud_count: 8103
+fraud_percentage: 1.1300766633520727
+test_fraud_caught: 1611
+test_fraud_missed: 10
+recall: 0.9938
+precision: 0.5343
+f1_score: 0.695
+top_features: ['gender_encoded', 'claimed_amount', 'cost_deviation', 'deviation_ratio', 'diagnosis_encoded', 'expected_cost', 'patient_age', 'patient_avg_deviation', 'patient_avg_amount', 'doc_missing_flag']
