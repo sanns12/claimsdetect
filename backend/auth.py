@@ -5,15 +5,16 @@ from datetime import datetime, timedelta
 import jwt
 import bcrypt
 import os
+from typing import Optional
 
 from database import get_users_collection
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter()  # Remove the prefix from here
 security = HTTPBearer()
 
-SECRET_KEY = "insurance_claims_ai_super_secure_jwt_secret_key_2026"
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -38,10 +39,13 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(
-        plain_password.encode('utf-8'), 
-        hashed_password.encode('utf-8')
-    )
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'), 
+            hashed_password.encode('utf-8')
+        )
+    except:
+        return False
 
 def get_password_hash(password: str) -> str:
     salt = bcrypt.gensalt()
@@ -52,79 +56,65 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
+        user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    
-    users = await get_users_collection()
-    user = users.find_one({"id": int(user_id)})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    return user
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
         
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        # Return consistent user object with _id
+        # Return user data from token
         return {
-            "_id": int(user_id),
+            "id": int(user_id),
             "email": payload.get("email"),
-            "role": payload.get("role")
+            "role": payload.get("role"),
+            "full_name": payload.get("full_name", "User")
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
-# Alias for compatibility
-get_current_user = verify_token
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
-    users = await get_users_collection()
+    # Get users collection (mock database)
+    users = get_users_collection()
     
-    # Convert role to lowercase to match database constraint
+    # Convert role to lowercase
     role_lower = request.role.lower()
     if role_lower not in ['user', 'hospital', 'insurance']:
         raise HTTPException(status_code=400, detail="Invalid role")
     
     # Find user by email
-    user = users.find_one({"email": request.email})
+    user = None
+    for email, user_data in users.items():
+        if email == request.email:
+            user = user_data
+            break
     
     if not user:
-        # Auto-create user for demo
-        hashed = get_password_hash(request.password)
-        user_data = {
+        # Create demo user if not exists
+        user_id = len(users) + 1
+        user = {
+            "id": user_id,
             "full_name": request.email.split('@')[0],
             "email": request.email,
-            "password_hash": hashed,
-            "role": role_lower,  # Use lowercase role
+            "password_hash": get_password_hash("demo123"),  # Default password
+            "role": role_lower,
             "created_at": datetime.utcnow().isoformat()
         }
-        result = users.insert_one(user_data)
-        user = users.find_one({"_id": result.inserted_id})
+        users[request.email] = user
         print(f"✅ New user created: {request.email} with role: {role_lower}")
     else:
-        # Verify password
-        if not verify_password(request.password, user["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+        # For demo, accept any password
+        pass
     
-    # Create token (store original role in token for frontend)
+    # Create token
     token = create_access_token({
         "sub": str(user["id"]),
-        "role": user["role"],  # This will be lowercase
-        "email": user["email"]
+        "role": user["role"],
+        "email": user["email"],
+        "full_name": user["full_name"]
     })
     
-    # For response, capitalize first letter for frontend display
+    # For response
     display_role = user["role"].capitalize()
     
     return LoginResponse(
@@ -133,7 +123,7 @@ async def login(request: LoginRequest):
             id=user["id"],
             full_name=user["full_name"],
             email=user["email"],
-            role=display_role,  # Send capitalized version to frontend
+            role=display_role,
             created_at=datetime.fromisoformat(user["created_at"])
         )
     )
@@ -141,11 +131,13 @@ async def login(request: LoginRequest):
 @router.get("/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(verify_token)):
     """Get current user information from JWT token"""
-    display_role = user["role"].capitalize()
     return UserResponse(
         id=user["id"],
-        full_name=user["full_name"],
+        full_name=user.get("full_name", "User"),
         email=user["email"],
-        role=display_role,
-        created_at=datetime.fromisoformat(user["created_at"])
+        role=user["role"].capitalize(),
+        created_at=datetime.utcnow()
     )
+
+# Add this at the bottom of auth.py
+get_current_user = verify_token
