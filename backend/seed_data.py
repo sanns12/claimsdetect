@@ -1,55 +1,75 @@
-from database import Database
-import asyncio
+# backend/seed_data.py
+
+from datetime import datetime
+from database import get_companies_collection, init_db
+
 
 async def seed_companies():
-    """Add initial companies to database"""
-    await Database.connect_db()
-    companies = Database.db.companies
-    
-    # Sample companies
+    """
+    Seed companies table aligned with SQLite schema.
+    """
+
+    init_db()  # ensure tables exist
+
+    companies_collection = await get_companies_collection()
+
     sample_companies = [
         {
-            "hospital_id": "HOSP-001",
-            "hospital_name": "City General Hospital",
-            "address": "123 Main St, New York, NY 10001",
-            "created_at": datetime.utcnow()
+            "name": "City General Hospital",
+            "type": "hospital",
+            "trust_status": "green",
+            "fraud_percentage": 0.5,
+            "total_claims": 450,
+            "flagged_claims": 8,
+            "created_at": datetime.utcnow().isoformat()
         },
         {
-            "hospital_id": "HOSP-002",
-            "hospital_name": "MediCare Plus Clinic",
-            "address": "456 Oak Ave, Los Angeles, CA 90001",
-            "created_at": datetime.utcnow()
+            "name": "MediCare Plus Clinic",
+            "type": "hospital",
+            "trust_status": "green",
+            "fraud_percentage": 0.9,
+            "total_claims": 320,
+            "flagged_claims": 12,
+            "created_at": datetime.utcnow().isoformat()
         },
         {
-            "hospital_id": "HOSP-003",
-            "hospital_name": "HealthFirst Medical Center",
-            "address": "789 Pine St, Chicago, IL 60601",
-            "created_at": datetime.utcnow()
+            "name": "HealthFirst Medical",
+            "type": "hospital",
+            "trust_status": "yellow",
+            "fraud_percentage": 1.8,
+            "total_claims": 280,
+            "flagged_claims": 18,
+            "created_at": datetime.utcnow().isoformat()
         },
         {
-            "hospital_id": "HOSP-004",
-            "hospital_name": "QuickCare Emergency",
-            "address": "321 Elm St, Houston, TX 77001",
-            "created_at": datetime.utcnow()
+            "name": "QuickCare Emergency",
+            "type": "hospital",
+            "trust_status": "yellow",
+            "fraud_percentage": 2.1,
+            "total_claims": 195,
+            "flagged_claims": 15,
+            "created_at": datetime.utcnow().isoformat()
         },
         {
-            "hospital_id": "HOSP-005",
-            "hospital_name": "Premier Health Group",
-            "address": "555 Cedar Rd, Miami, FL 33101",
-            "created_at": datetime.utcnow()
+            "name": "Premier Health Group",
+            "type": "hospital",
+            "trust_status": "green",
+            "fraud_percentage": 0.8,
+            "total_claims": 520,
+            "flagged_claims": 14,
+            "created_at": datetime.utcnow().isoformat()
         }
     ]
-    
+
     for company in sample_companies:
-        # Check if exists
-        existing = await companies.find_one({"hospital_id": company["hospital_id"]})
+        existing = companies_collection.find_one({"name": company["name"]})
         if not existing:
-            await companies.insert_one(company)
-            print(f"✅ Added {company['hospital_name']}")
-    
-    print("✅ Seed data complete")
-    await Database.close_db()
+            companies_collection.insert_one(company)
+            print(f"✅ Added {company['name']}")
+
+    print("✅ Company seed complete")
+
 
 if __name__ == "__main__":
-    from datetime import datetime
+    import asyncio
     asyncio.run(seed_companies())

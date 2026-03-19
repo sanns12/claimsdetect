@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 #from bson import ObjectId
 
 from database import get_companies_collection, get_claims_collection
-from auth import get_current_user
-from models import CompanyTrust, TrustLevel
+from app.routes.auth import get_current_user
+from app.schemas.models import CompanyTrustResponse, TrustLevel
 
 router = APIRouter(prefix="/companies", tags=["Companies"])
 

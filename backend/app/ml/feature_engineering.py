@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-
     df = df.copy()
 
     # Clean claimed_amount
@@ -64,18 +63,15 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     features_df = features_df.astype(float)
 
     return features_df
-def build_feature_vector(claim_data: dict) -> pd.DataFrame:
-    """
-    Convert single claim dict into model-ready feature dataframe
-    """
 
+def build_feature_vector(claim_data: dict) -> pd.DataFrame:
     # Convert dict to DataFrame
     df = pd.DataFrame([{
-        "claimed_amount": claim_data.get("claim_amount", 0),
+        "claimed_amount": claim_data.get("claim_amount", claim_data.get("amount", 0)),
         "patient_age": claim_data.get("age", 35),
         "gender": claim_data.get("gender", "M"),
-        "admission_date": claim_data.get("admission_date"),
-        "discharge_date": claim_data.get("discharge_date"),
+        "admission_date": claim_data.get("admission_date", claim_data.get("admissionDate")),
+        "discharge_date": claim_data.get("discharge_date", claim_data.get("dischargeDate")),
         "billed_items_count": claim_data.get("billed_items_count", 0),
         "previous_claims_count": claim_data.get("previous_claims_count", 0),
         "doc_missing_flag": claim_data.get("doc_missing_flag", 0)

@@ -4,7 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
 from pathlib import Path
-from feature_engineering import engineer_features
+from app.ml.feature_engineering import engineer_features
 
 def main():
 
