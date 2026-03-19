@@ -70,3 +70,8 @@ test_*.py
 # 📄 Don't push these either
 .DS_Store
 *.ipynb_checkpoints
+
+__pycache__/
+*.pyc
+*.db
+*.sqlite

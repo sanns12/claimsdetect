@@ -4,7 +4,21 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
 from pathlib import Path
-from app.ml.feature_engineering import engineer_features
+# Import feature engineering from fraud_engine module
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from fraud_engine.feature_builder import clean_claim_amounts, create_age_groups
+
+def engineer_features(df):
+    """Simple feature engineering for training. Adapt as needed for your dataset."""
+    df = df.copy()
+    if 'claimed_amount' in df.columns:
+        df = clean_claim_amounts(df)
+    if 'patient_age' in df.columns or 'age' in df.columns:
+        age_col = 'patient_age' if 'patient_age' in df.columns else 'age'
+        df[age_col] = pd.to_numeric(df[age_col], errors='coerce')
+    return df
 
 def main():
 

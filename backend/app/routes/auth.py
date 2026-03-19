@@ -64,7 +64,7 @@ async def login(request: LoginRequest):
         }
 
         result = users.insert_one(user_data)
-        user = users.find_one({"id": result.inserted_id})
+        user = users.find_one({"_id": result.inserted_id})
 
     else:
         if not verify_password(request.password, user["password_hash"]):
@@ -73,7 +73,8 @@ async def login(request: LoginRequest):
     token = create_access_token({
         "sub": str(user["id"]),
         "role": user["role"],
-        "email": user["email"]
+        "email": user["email"],
+        "full_name": user["full_name"]   
     })
 
     return LoginResponse(
@@ -94,10 +95,14 @@ async def login(request: LoginRequest):
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(user: dict = Depends(get_current_user)):
+    users = await get_users_collection()
+    db_user = users.find_one({"id": user["id"]})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
     return UserResponse(
-        id=user["id"],
-        full_name=user["full_name"],
-        email=user["email"],
-        role=user["role"].capitalize(),
-        created_at=datetime.fromisoformat(user["created_at"])
+        id=db_user["id"],
+        full_name=db_user["full_name"],
+        email=db_user["email"],
+        role=db_user["role"].capitalize(),
+        created_at=datetime.fromisoformat(db_user["created_at"])
     )

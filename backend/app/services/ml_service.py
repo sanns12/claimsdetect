@@ -1,8 +1,7 @@
 # services/ml_service.py
 
 from datetime import datetime
-from app.ml.feature_engineering import build_feature_vector
-from app.ml.ml_model import predict_fraud
+from ml.fraud_engine.fraud_predictor import run_fraud_engine
 
 
 def evaluate_claim(claim_data: dict) -> dict:
@@ -15,22 +14,16 @@ def evaluate_claim(claim_data: dict) -> dict:
     """
 
     try:
-        # ----------------------------
-        # Feature Engineering
-        # ----------------------------
-        features_df = build_feature_vector(claim_data)
+        # Normalize request keys for the fraud engine contract.
+        engine_input = dict(claim_data)
+        if "patient_age" not in engine_input:
+            engine_input["patient_age"] = engine_input.get("age", 0)
 
-        # ----------------------------
-        # ML Prediction
-        # ----------------------------
-        prediction = predict_fraud(claim_data)
+        prediction = run_fraud_engine(engine_input)
 
-        fraud_probability = prediction.get("fraud_probability", 0.0)
-        risk_score = prediction.get(
-            "risk_score",
-            int(fraud_probability * 100)
-        )
-        factors = prediction.get("factors", [])
+        fraud_probability = prediction.get("fraud_risk_score", 0.0)
+        risk_score = int(fraud_probability * 100)
+        factors = prediction.get("top_risk_factors", [])
 
         # ----------------------------
         # Status Classification Logic

@@ -45,11 +45,11 @@ export default function UserDashboard() {
         const statsData = await getUserDashboardStats();
 
         setStats({
-          total: statsData.total || 0,
+          total: statsData.total_claims || 0,
           approved: statsData.approved || 0,
           flagged: statsData.flagged || 0,
           fraud: statsData.fraud || 0,
-          pending: statsData.pending || 0
+          pending: statsData.pending_review || 0
         });
 
         // Fetch recent claims

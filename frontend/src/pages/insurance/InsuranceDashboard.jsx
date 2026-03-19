@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
+import {
+  getInsuranceDashboardStats,
+  getFraudTrends,
+  getRecentAlerts
+} from '../../services/dashboard';
+import { logout } from '../../services/auth';
 import { 
   FiActivity, 
   FiClock, 
@@ -26,29 +32,23 @@ export default function InsuranceDashboard() {
   const navigate = useNavigate();
   const [showLogoutMenu, setShowLogoutMenu] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Stats data
-  const [stats] = useState({
-    totalClaims: 1247,
-    totalValue: '$4.2M',
-    fraudDetected: '$284K',
-    fraudCases: 23,
-    flaggedCases: 47,
-    approvedCases: 892,
-    pendingReview: 156,
-    avgProcessingTime: '2.8 days',
-    accuracyRate: '98.5%'
+  const [stats, setStats] = useState({
+    totalClaims: 0,
+    totalValue: 0,
+    fraudDetected: 0,
+    fraudCases: 0,
+    flaggedCases: 0,
+    approvedCases: 0,
+    pendingReview: 0,
+    avgProcessingTime: '0 days',
+    accuracyRate: '0%'
   });
 
   // Fraud trends data
-  const [fraudTrends] = useState([
-    { month: 'Jan', amount: 45 },
-    { month: 'Feb', amount: 52 },
-    { month: 'Mar', amount: 38 },
-    { month: 'Apr', amount: 65 },
-    { month: 'May', amount: 48 },
-    { month: 'Jun', amount: 72 }
-  ]);
+  const [fraudTrends, setFraudTrends] = useState([]);
 
   // High-risk companies
   const [highRiskCompanies] = useState([
@@ -60,12 +60,7 @@ export default function InsuranceDashboard() {
   ]);
 
   // Recent alerts
-  const [recentAlerts] = useState([
-    { id: 1, type: 'fraud', message: 'Potential fraud detected - Claim #CLM2345', time: '10 min ago', severity: 'high' },
-    { id: 2, type: 'flag', message: 'Claim #CLM2346 flagged for review', time: '25 min ago', severity: 'medium' },
-    { id: 3, type: 'risk', message: 'City General Hospital risk score increased', time: '1 hour ago', severity: 'medium' },
-    { id: 4, type: 'approval', message: 'Bulk approval completed for 23 claims', time: '2 hours ago', severity: 'low' }
-  ]);
+  const [recentAlerts, setRecentAlerts] = useState([]);
 
   // Department risk distribution
   const [riskDistribution] = useState([
@@ -77,17 +72,42 @@ export default function InsuranceDashboard() {
   ]);
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-    }, 1000);
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const statsData = await getInsuranceDashboardStats();
+        setStats({
+          totalClaims: statsData.total_claims || 0,
+          totalValue: statsData.total_amount || 0,
+          fraudDetected: (statsData.total_amount || 0) * (statsData.fraud_probability || 0),
+          fraudCases: statsData.fraud_cases || 0,
+          flaggedCases: statsData.flagged_cases || 0,
+          approvedCases: statsData.approved_cases || 0,
+          pendingReview: statsData.pending_review || 0,
+          avgProcessingTime: statsData.avg_processing_time || '0 days',
+          accuracyRate: statsData.accuracy_rate || '98.5%'
+        });
+
+        const trends = await getFraudTrends('month');
+        setFraudTrends(Array.isArray(trends) ? trends : []);
+
+        const alerts = await getRecentAlerts(10);
+        setRecentAlerts(Array.isArray(alerts) ? alerts : []);
+      } catch (err) {
+        console.error('Failed to load insurance dashboard:', err);
+        setError('Failed to load dashboard data.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
+    logout();
     navigate('/login');
   };
 
@@ -194,6 +214,12 @@ export default function InsuranceDashboard() {
 
       {/* Main Content */}
       <main className="p-6">
+        {error && (
+          <div className="mb-6 bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
+
         {/* Welcome Section */}
         <div className="mb-8 flex justify-between items-center">
           <div>
@@ -235,7 +261,7 @@ export default function InsuranceDashboard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-textSecondary text-sm">Total Value</p>
-              <p className="text-3xl font-bold mt-2 text-success">{stats.totalValue}</p>
+              <p className="text-3xl font-bold mt-2 text-success">${Number(stats.totalValue || 0).toLocaleString()}</p>
               <p className="text-xs text-textSecondary mt-2">Processed claims</p>
             </div>
             <div className="p-3 bg-success/20 rounded-lg">
@@ -248,7 +274,7 @@ export default function InsuranceDashboard() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-textSecondary text-sm">Fraud Detected</p>
-              <p className="text-3xl font-bold mt-2 text-danger">{stats.fraudDetected}</p>
+              <p className="text-3xl font-bold mt-2 text-danger">${Number(stats.fraudDetected || 0).toLocaleString()}</p>
               <p className="text-xs text-danger mt-2">{stats.fraudCases} cases</p>
             </div>
             <div className="p-3 bg-danger/20 rounded-lg">

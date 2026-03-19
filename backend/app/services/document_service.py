@@ -2,7 +2,7 @@
 
 import hashlib
 from fastapi import UploadFile, HTTPException
-from app.ml.ocr import extract_text_from_file
+from ml.document_engine.ocr_pipeline import extract_text_from_file
 from app.services.document_validator import validate_claim_against_document
 
 

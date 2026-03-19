@@ -1,4 +1,4 @@
-# backend/routes/dashboard.py
+datetime# backend/routes/dashboard.py
 
 from fastapi import APIRouter, Depends
 from typing import List
@@ -6,6 +6,7 @@ from datetime import datetime
 from collections import defaultdict
 
 from app.core.security import get_current_user
+from backend.app.routes import claims
 from database import get_claims_collection
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -30,10 +31,8 @@ async def get_dashboard_stats(
         # hospital or insurance → see all
         query = {}
 
-    claims = claims_collection.find(query, limit=None)
-
+    claims = list(claims_collection.find(query))
     total = len(claims)
-
     approved = len([c for c in claims if c["status"] == "Approved"])
     flagged = len([c for c in claims if c["status"] == "Flagged"])
     fraud = len([c for c in claims if c["status"] == "Fraud"])
@@ -44,14 +43,19 @@ async def get_dashboard_stats(
     ])
 
     total_amount = sum(c.get("claim_amount", 0) for c in claims)
-
+    today = datetime.utcnow().date().isoformat()
+    today_claims = len([c for c in claims if c["created_at"].startswith(today)])
+    avg_processing_time = 0  # compute from admission/discharge or leave as 0
     return {
         "total_claims": total,
         "total_amount": total_amount,
         "approved": approved,
         "flagged": flagged,
         "fraud": fraud,
-        "pending_review": pending
+        "pending_review": pending,
+        "today_claims": today_claims,
+        "avg_processing_time": 0,       # placeholder until you compute it
+        "fraud_probability": round(fraud / total, 2) if total else 0
     }
 
 
