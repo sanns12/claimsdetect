@@ -112,28 +112,30 @@ def run_fraud_engine(claim_data, model_path=None, historical_df=None, encoders=N
             df_input, _ = encode_categorical_features(df_input, fit=True)
         
         # === FIX: Prepare features exactly as model expects ===
+        # One-hot encode age groups
+        age_bins   = [0, 18, 35, 50, 65, 999]
+        age_labels = ['age_0_18', 'age_19_35', 'age_36_50', 'age_51_65', 'age_65_plus']
+        age_val = df_input['patient_age'].fillna(0).iloc[0]
+        for label, (lo, hi) in zip(age_labels, zip(age_bins, age_bins[1:])):
+            df_input[label] = int(lo < age_val <= hi)
+
+        # One-hot encode gender
+        gender_val = str(df_input['gender'].iloc[0]).upper()
+        df_input['gender_M'] = int(gender_val == 'M')
+        df_input['gender_F'] = int(gender_val == 'F')
+
+        # These are the exact features the model was trained on
         model_features = [
-            'patient_age', 'gender', 'hospital_id', 'diagnosis_code', 'claimed_amount',
-            'billed_items_count', 'previous_claims_count', 'insurer_id', 'doc_missing_flag',
-            'length_of_stay', 'claimed_per_day', 'amount_per_item'
+            'claimed_amount', 'billed_items_count', 'previous_claims_count',
+            'doc_missing_flag', 'length_of_stay',
+            'age_0_18', 'age_19_35', 'age_36_50', 'age_51_65', 'age_65_plus',
+            'gender_M', 'gender_F'
         ]
-        
-        # Ensure all features exist - use safe defaults that might be in training data
-        for col in model_features:
-            if col not in df_input.columns:
-                if col == 'gender':
-                    df_input[col] = 'M'  # Most common gender
-                elif col == 'hospital_id':
-                    df_input[col] = 'HOSP001'  # Default hospital
-                elif col == 'diagnosis_code':
-                    df_input[col] = 'A00'  # Default diagnosis
-                elif col == 'insurer_id':
-                    df_input[col] = 'INS001'  # Default insurer
-                else:
-                    df_input[col] = 0
-        
-        # Select features for model
+
         X = df_input[model_features].copy()
+        # All columns are now numeric — no cat_cols needed
+        for col in model_features:
+            X[col] = pd.to_numeric(X[col], errors='coerce').fillna(0)
         
         # Convert categorical columns to string type
         cat_cols = ['gender', 'hospital_id', 'diagnosis_code', 'insurer_id']
@@ -183,8 +185,8 @@ def run_fraud_engine(claim_data, model_path=None, historical_df=None, encoders=N
                     if 'scaler' in preprocessor:
                         # Get numerical columns (excluding categorical ones)
                         if 'label_encoders' in preprocessor:
-                            cat_cols = list(preprocessor['label_encoders'].keys())
-                            num_cols = [c for c in X_processed.columns if c not in cat_cols]
+                            encoded_cat_cols = list(preprocessor['label_encoders'].keys())
+                            num_cols = [c for c in X_processed.columns if c not in encoded_cat_cols]
                         else:
                             num_cols = X_processed.columns.tolist()
                         
@@ -209,11 +211,7 @@ def run_fraud_engine(claim_data, model_path=None, historical_df=None, encoders=N
                 
             except Exception as e:
                 print(f"⚠️ Preprocessor failed, using raw features: {e}")
-                # For raw features, we need to encode categoricals for XGBoost
-                X_raw = X.copy()
-                for col in cat_cols:
-                    if col in X_raw.columns:
-                        X_raw[col] = pd.Categorical(X_raw[col]).codes
+                X_raw = X.copy()  # already numeric, no encoding needed
                 fraud_probability = float(model.predict_proba(X_raw)[0, 1])
                 top_factors = get_top_risk_factors(X_raw, model, model_features)
         else:

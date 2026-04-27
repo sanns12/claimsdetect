@@ -1,4 +1,4 @@
-# backend/routes/auth.py
+# backend/app/routes/auth.py
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
@@ -44,27 +44,39 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
-    users = await get_users_collection()
+    db = await get_users_collection()
 
     role_lower = request.role.lower()
     if role_lower not in ["user", "hospital", "insurance"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
-    user = users.find_one({"email": request.email})
+    # Find user by email
+    async with db.execute(
+        "SELECT * FROM users WHERE email = ?", (request.email,)
+    ) as cursor:
+        user = await cursor.fetchone()
 
     if not user:
         # Auto-create for demo
         hashed = get_password_hash(request.password)
-        user_data = {
-            "full_name": request.email.split("@")[0],
-            "email": request.email,
-            "password_hash": hashed,
-            "role": role_lower,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        await db.execute(
+            """INSERT INTO users (full_name, email, password_hash, role, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                request.email.split("@")[0],
+                request.email,
+                hashed,
+                role_lower,
+                datetime.utcnow().isoformat()
+            )
+        )
+        await db.commit()
 
-        result = users.insert_one(user_data)
-        user = users.find_one({"_id": result.inserted_id})
+        # Fetch the newly created user
+        async with db.execute(
+            "SELECT * FROM users WHERE email = ?", (request.email,)
+        ) as cursor:
+            user = await cursor.fetchone()
 
     else:
         if not verify_password(request.password, user["password_hash"]):
@@ -74,7 +86,7 @@ async def login(request: LoginRequest):
         "sub": str(user["id"]),
         "role": user["role"],
         "email": user["email"],
-        "full_name": user["full_name"]   
+        "full_name": user["full_name"]
     })
 
     return LoginResponse(
@@ -94,15 +106,21 @@ async def login(request: LoginRequest):
 # -------------------------------
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: dict = Depends(get_current_user)):
-    users = await get_users_collection()
-    db_user = users.find_one({"id": user["id"]})
-    if not db_user:
+async def get_me(current_user: dict = Depends(get_current_user)):
+    db = await get_users_collection()
+
+    async with db.execute(
+        "SELECT * FROM users WHERE id = ?", (current_user["id"],)
+    ) as cursor:
+        user = await cursor.fetchone()
+
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
     return UserResponse(
-        id=db_user["id"],
-        full_name=db_user["full_name"],
-        email=db_user["email"],
-        role=db_user["role"].capitalize(),
-        created_at=datetime.fromisoformat(db_user["created_at"])
+        id=user["id"],
+        full_name=user["full_name"],
+        email=user["email"],
+        role=user["role"].capitalize(),
+        created_at=datetime.fromisoformat(user["created_at"])
     )

@@ -11,6 +11,8 @@ export default function UserSubmitClaim() {
   const [formData, setFormData] = useState({
     fullName: '',
     age: '',
+    gender: '',
+    hospitalName: '',
     admissionDate: '',
     dischargeDate: '',
     disease: '',
@@ -22,7 +24,6 @@ export default function UserSubmitClaim() {
   const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
-  
 
   const diseases = [
     'Select Disease',
@@ -39,12 +40,9 @@ export default function UserSubmitClaim() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: null }));
     }
-    // Reset ML risk score when form changes
-    //setMlRiskScore(null);
   };
 
   const handleFileDrop = (acceptedFiles) => {
@@ -73,7 +71,6 @@ export default function UserSubmitClaim() {
     if (!formData.amount) newErrors.amount = 'Claim amount is required';
     else if (formData.amount <= 0) newErrors.amount = 'Amount must be greater than 0';
     
-    // Check if discharge date is after admission date
     if (formData.admissionDate && formData.dischargeDate) {
       if (new Date(formData.dischargeDate) < new Date(formData.admissionDate)) {
         newErrors.dischargeDate = 'Discharge date must be after admission date';
@@ -84,58 +81,55 @@ export default function UserSubmitClaim() {
     return Object.keys(newErrors).length === 0;
   };
 
-
   const nextStep = async () => {
     if (currentStep === 1 && validateStep1()) {
       setCurrentStep(2);
     } else if (currentStep === 2 && validateStep2()) {
-      
       setCurrentStep(3);
     }
   };
 
   const prevStep = () => {
     setCurrentStep(currentStep - 1);
-    // Clear step-specific errors when going back
     setErrors({});
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (currentStep === 3) {
-    setIsSubmitting(true);
-    setSubmitError('');
+    if (currentStep === 3) {
+      setIsSubmitting(true);
+      setSubmitError('');
 
-    try {
-      const claimData = {
-        age: parseInt(formData.age),
-        disease: formData.disease,
-        admission_date: formData.admissionDate,
-        discharge_date: formData.dischargeDate,
-        claim_amount: parseFloat(formData.amount),
-        patient_name: formData.fullName,
-        hospital_name: 'City General Hospital',
-        gender: "M" // or add gender field later properly
-      };
+      try {
+        const claimData = {
+          age: parseInt(formData.age),
+          disease: formData.disease,
+          admission_date: formData.admissionDate,
+          discharge_date: formData.dischargeDate,
+          claim_amount: parseFloat(formData.amount),
+          patient_name: formData.fullName,
+          hospital_name: formData.hospitalName,
+          gender: formData.gender || 'M',
+        };
 
-      const result = await submitClaim(claimData, files[0]);
+        const result = await submitClaim(claimData, files[0]);
 
-      navigate('/user/claims', {
-        state: {
-          message: "Claim submitted successfully!",
-          claimId: result.claimId
-        }
-      });
+        navigate('/user/claims', {
+          state: {
+            message: "Claim submitted successfully!",
+            claimId: result.claimId
+          }
+        });
 
-    } catch (error) {
-      setSubmitError(error.message || 'Failed to submit claim.');
-    } finally {
-      setIsSubmitting(false);
+      } catch (error) {
+        setSubmitError(error.message || 'Failed to submit claim.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
-  }
-};
-  // Calculate stay duration for display
+  };
+
   const getStayDuration = () => {
     if (formData.admissionDate && formData.dischargeDate) {
       const start = new Date(formData.admissionDate);
@@ -247,6 +241,33 @@ export default function UserSubmitClaim() {
                       <p className="text-red-500 text-xs mt-1">{errors.age}</p>
                     )}
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Gender</label>
+                    <select
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleChange}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                      <option value="O">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Hospital Name</label>
+                    <input
+                      type="text"
+                      name="hospitalName"
+                      value={formData.hospitalName}
+                      onChange={handleChange}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500"
+                      placeholder="Enter hospital name"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -351,7 +372,6 @@ export default function UserSubmitClaim() {
                   </div>
                 </div>
 
-                {/* Stay Duration Display */}
                 {getStayDuration() && (
                   <div className="mt-4 pt-4 border-t border-gray-700">
                     <p className="text-sm text-gray-400">
@@ -365,22 +385,16 @@ export default function UserSubmitClaim() {
                 <Button type="button" variant="secondary" onClick={prevStep}>
                   ← Previous
                 </Button>
-                <Button 
-                  type="button" 
-                  onClick={nextStep}
-                  
-                >
+                <Button type="button" onClick={nextStep}>
                   Next Step →
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Step 3: Document Upload & ML Review */}
+          {/* Step 3: Document Upload & Review */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              
-              {/* Document Upload */}
               <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                   <FiFileText className="text-blue-500" />
@@ -389,7 +403,6 @@ export default function UserSubmitClaim() {
                 
                 <FileUploader onDrop={handleFileDrop} />
 
-                {/* File List */}
                 {files.length > 0 && (
                   <div className="mt-6">
                     <p className="text-sm font-medium mb-3">Uploaded Files ({files.length}):</p>
@@ -423,7 +436,6 @@ export default function UserSubmitClaim() {
                 </p>
               </div>
 
-              {/* Error Message */}
               {submitError && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
                   <FiAlertCircle className="text-red-500 flex-shrink-0" />
@@ -431,7 +443,6 @@ export default function UserSubmitClaim() {
                 </div>
               )}
 
-              {/* Submit Buttons */}
               <div className="flex justify-between">
                 <Button type="button" variant="secondary" onClick={prevStep}>
                   ← Previous
@@ -440,10 +451,10 @@ export default function UserSubmitClaim() {
                   type="submit" 
                   disabled={isSubmitting}
                 >
-                  Submit Claim
+                  {isSubmitting ? 'Submitting...' : 'Submit Claim'}
                 </Button>
               </div>
-              </div>
+            </div>
           )}
         </form>
       </main>

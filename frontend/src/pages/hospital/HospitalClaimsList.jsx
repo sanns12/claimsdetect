@@ -37,7 +37,6 @@ export default function HospitalClaimsList() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [claims, setClaims] = useState([]);
 
-  // Filter states
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
@@ -49,38 +48,20 @@ export default function HospitalClaimsList() {
     endDate: ''
   });
 
-  // Sorting state
   const [sortConfig, setSortConfig] = useState({
     key: 'date',
     direction: 'desc'
   });
 
-  // Department options
   const departments = [
-    'all',
-    'Cardiology',
-    'Orthopedics',
-    'Emergency',
-    'Neurology',
-    'Oncology',
-    'Pediatrics',
-    'General Medicine',
-    'Surgery',
-    'ICU'
+    'all', 'Cardiology', 'Orthopedics', 'Emergency', 'Neurology',
+    'Oncology', 'Pediatrics', 'General Medicine', 'Surgery', 'ICU'
   ];
 
-  // Insurance providers
   const insuranceProviders = [
-    'all',
-    'Blue Cross',
-    'Aetna',
-    'Cigna',
-    'UnitedHealth',
-    'Medicare',
-    'Medicaid'
+    'all', 'Blue Cross', 'Aetna', 'Cigna', 'UnitedHealth', 'Medicare', 'Medicaid'
   ];
 
-  // Load claims
   useEffect(() => {
     fetchClaims();
   }, []);
@@ -101,7 +82,13 @@ export default function HospitalClaimsList() {
     }
   };
 
-  // Filter claims based on all criteria
+  // Helper to parse amount from either a number or formatted string like "$5,200"
+  const parseAmount = (amount) => {
+    if (typeof amount === 'number') return amount;
+    if (typeof amount === 'string') return parseFloat(amount.replace(/[$,]/g, '')) || 0;
+    return 0;
+  };
+
   const filteredClaims = claims.filter(claim => {
     const matchesSearch = filters.search === '' || 
       claim.id.toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -144,32 +131,27 @@ export default function HospitalClaimsList() {
            matchesRisk && matchesInsurance && matchesDate;
   });
 
-  // Sort claims
   const sortedClaims = [...filteredClaims].sort((a, b) => {
     let aValue = a[sortConfig.key];
     let bValue = b[sortConfig.key];
 
-    if (sortConfig.key === 'amount' || sortConfig.key === 'risk') {
-      aValue = Number(aValue?.replace('$', '') || 0);
-      bValue = Number(bValue?.replace('$', '') || 0);
+    // Normalize amount and risk to numbers for proper sorting
+    if (sortConfig.key === 'amount') {
+      aValue = parseAmount(aValue);
+      bValue = parseAmount(bValue);
+    } else if (sortConfig.key === 'risk') {
+      aValue = Number(aValue) || 0;
+      bValue = Number(bValue) || 0;
     }
 
-    if (aValue < bValue) {
-      return sortConfig.direction === 'asc' ? -1 : 1;
-    }
-    if (aValue > bValue) {
-      return sortConfig.direction === 'asc' ? 1 : -1;
-    }
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;
   });
 
-  // Calculate summary stats
   const stats = {
     total: filteredClaims.length,
-    totalAmount: filteredClaims.reduce((sum, claim) => {
-      const amount = parseFloat(claim.amount?.replace('$', '') || 0);
-      return sum + amount;
-    }, 0),
+    totalAmount: filteredClaims.reduce((sum, claim) => sum + parseAmount(claim.amount), 0),
     pending: filteredClaims.filter(c => 
       [CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING, CLAIM_STATUS.MANUAL_REVIEW].includes(c.status)
     ).length,
@@ -187,22 +169,15 @@ export default function HospitalClaimsList() {
 
   const handleSelectClaim = (claimId) => {
     setSelectedClaims(prev => {
-      if (prev.includes(claimId)) {
-        return prev.filter(id => id !== claimId);
-      } else {
-        return [...prev, claimId];
-      }
+      if (prev.includes(claimId)) return prev.filter(id => id !== claimId);
+      return [...prev, claimId];
     });
   };
 
   const handleSelectAllChange = () => {
     const newSelectAll = !selectAll;
     setSelectAll(newSelectAll);
-    if (newSelectAll) {
-      setSelectedClaims(filteredClaims.map(claim => claim.id));
-    } else {
-      setSelectedClaims([]);
-    }
+    setSelectedClaims(newSelectAll ? filteredClaims.map(claim => claim.id) : []);
   };
 
   const handleDeleteClick = (claim) => {
@@ -212,24 +187,16 @@ export default function HospitalClaimsList() {
 
   const confirmDelete = async () => {
     if (!claimToDelete) return;
-    
     setDeleteInProgress(true);
     
     try {
       await deleteClaim(claimToDelete.id);
-      
-      // Update local state
-      const updatedClaims = claims.filter(c => c.id !== claimToDelete.id);
-      setClaims(updatedClaims);
-      
-      // Clear selection if needed
+      setClaims(claims.filter(c => c.id !== claimToDelete.id));
       if (selectedClaims.includes(claimToDelete.id)) {
         setSelectedClaims(prev => prev.filter(id => id !== claimToDelete.id));
       }
-      
       setShowDeleteModal(false);
       setClaimToDelete(null);
-      
     } catch (err) {
       console.error('Delete failed:', err);
       setError('Failed to delete claim. Please try again.');
@@ -309,23 +276,13 @@ export default function HospitalClaimsList() {
             <p className="text-sm text-textSecondary mb-4">
               Patient: <span className="text-white">{claimToDelete?.patientName}</span>
             </p>
-            <p className="text-sm text-textSecondary mb-6">
-              This action cannot be undone.
-            </p>
+            <p className="text-sm text-textSecondary mb-6">This action cannot be undone.</p>
 
             <div className="flex gap-3 justify-end">
-              <Button 
-                variant="secondary" 
-                onClick={cancelDelete}
-                disabled={deleteInProgress}
-              >
+              <Button variant="secondary" onClick={cancelDelete} disabled={deleteInProgress}>
                 Cancel
               </Button>
-              <Button 
-                variant="danger"
-                onClick={confirmDelete}
-                disabled={deleteInProgress}
-              >
+              <Button variant="danger" onClick={confirmDelete} disabled={deleteInProgress}>
                 {deleteInProgress ? 'Deleting...' : 'Delete Permanently'}
               </Button>
             </div>
@@ -337,10 +294,7 @@ export default function HospitalClaimsList() {
       <header className="bg-surface/50 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-40">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link 
-              to="/hospital/dashboard" 
-              className="p-2 hover:bg-surface rounded-lg transition-colors"
-            >
+            <Link to="/hospital/dashboard" className="p-2 hover:bg-surface rounded-lg transition-colors">
               <FiArrowLeft className="text-xl" />
             </Link>
             <h1 className="text-xl font-bold">Claims Management</h1>
@@ -349,7 +303,6 @@ export default function HospitalClaimsList() {
             </span>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-3">
             <Button 
               variant="secondary" 
@@ -375,11 +328,7 @@ export default function HospitalClaimsList() {
               Export
             </Button>
 
-            <Button 
-              variant="secondary" 
-              size="sm"
-              onClick={fetchClaims}
-            >
+            <Button variant="secondary" size="sm" onClick={fetchClaims}>
               <FiRefreshCw />
             </Button>
           </div>
@@ -414,16 +363,12 @@ export default function HospitalClaimsList() {
                 <FiFilter className="text-primary" />
                 Advanced Filters
               </h2>
-              <button 
-                onClick={clearFilters}
-                className="text-sm text-primary hover:underline"
-              >
+              <button onClick={clearFilters} className="text-sm text-primary hover:underline">
                 Clear all filters
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Search */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Search</label>
                 <div className="relative">
@@ -438,7 +383,6 @@ export default function HospitalClaimsList() {
                 </div>
               </div>
 
-              {/* Status Filter */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Status</label>
                 <select
@@ -453,7 +397,6 @@ export default function HospitalClaimsList() {
                 </select>
               </div>
 
-              {/* Department Filter */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Department</label>
                 <select
@@ -469,7 +412,6 @@ export default function HospitalClaimsList() {
                 </select>
               </div>
 
-              {/* Insurance Provider */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Insurance</label>
                 <select
@@ -485,7 +427,6 @@ export default function HospitalClaimsList() {
                 </select>
               </div>
 
-              {/* Date Range */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Date Range</label>
                 <select
@@ -501,7 +442,6 @@ export default function HospitalClaimsList() {
                 </select>
               </div>
 
-              {/* Custom Date Range */}
               {filters.dateRange === 'custom' && (
                 <>
                   <div>
@@ -525,7 +465,6 @@ export default function HospitalClaimsList() {
                 </>
               )}
 
-              {/* Risk Level */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Risk Level</label>
                 <select
@@ -542,7 +481,6 @@ export default function HospitalClaimsList() {
               </div>
             </div>
 
-            {/* Active Filters Display */}
             <div className="mt-4 flex flex-wrap gap-2">
               {filters.search && (
                 <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm flex items-center gap-1">
@@ -723,7 +661,6 @@ export default function HospitalClaimsList() {
               </table>
             </div>
 
-            {/* Empty State */}
             {filteredClaims.length === 0 && !loading && (
               <div className="p-12 text-center">
                 <FiFileText className="text-4xl text-textSecondary mx-auto mb-4" />
@@ -733,7 +670,6 @@ export default function HospitalClaimsList() {
               </div>
             )}
 
-            {/* Pagination */}
             {filteredClaims.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-800 flex items-center justify-between">
                 <p className="text-sm text-textSecondary">

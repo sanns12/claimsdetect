@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
+import { getClaims } from '../../services/claims';
 import { 
   FiSearch, 
   FiFilter, 
@@ -34,9 +35,8 @@ export default function InsuranceClaimsList() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedClaims, setSelectedClaims] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'flagged', 'fraud', 'pending'
+  const [viewMode, setViewMode] = useState('all');
 
-  // Filter states
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
@@ -50,16 +50,13 @@ export default function InsuranceClaimsList() {
     maxAmount: ''
   });
 
-  // Sorting state
   const [sortConfig, setSortConfig] = useState({
     key: 'date',
     direction: 'desc'
   });
 
-  // claims will be loaded from API
   const [claims, setClaims] = useState([]);
 
-  // Companies list for filter
   const companies = [
     'all',
     'City General Hospital',
@@ -69,87 +66,76 @@ export default function InsuranceClaimsList() {
     'Premier Health Group'
   ];
 
-  // Load claims on mount
-useEffect(() => {
-  const fetchClaims = async () => {
-    try {
-      setLoading(true);
-      const response = await getClaims();
-      
-      console.log('📥 Insurance claims response:', response);
-      
-      // The response should be { claims: [...] }
-      const claimsArray = response?.claims || [];
-      
-      if (claimsArray.length === 0) {
-        console.log('No claims found');
+  useEffect(() => {
+    const fetchClaims = async () => {
+      try {
+        setLoading(true);
+        const response = await getClaims();
+        
+        console.log('📥 Insurance claims response:', response);
+        
+        const claimsArray = response?.claims || [];
+        
+        if (claimsArray.length === 0) {
+          console.log('No claims found');
+          setClaims([]);
+          return;
+        }
+        
+        const mapped = claimsArray.map(c => ({
+          id: c.id || c.claim_id || `CLM${c.id}`,
+          patientName: c.patient_name || c.patientName || 'Unknown',
+          hospital: c.hospital_name || c.hospital || '',
+          date: c.created_at ? c.created_at.split('T')[0] : (c.date || ''),
+          amount: typeof c.amount === 'number' ? c.amount : parseFloat(c.claim_amount) || 0,
+          status: c.status || CLAIM_STATUS.SUBMITTED,
+          risk: c.risk_score || c.risk || 0,
+          fraudScore: c.fraud_probability || c.fraud_score || 0,
+          flags: c.flags || [],
+          department: c.department || null,
+          insuranceProvider: c.insurance_provider || null,
+          priority: c.priority || 'normal'
+        }));
+        
+        console.log(`✅ Mapped ${mapped.length} claims for display`);
+        setClaims(mapped);
+      } catch (err) {
+        console.error('❌ Failed to load claims:', err);
         setClaims([]);
-        return;
+      } finally {
+        setLoading(false);
       }
-      
-      // Map API claims to UI shape
-      const mapped = claimsArray.map(c => ({
-        id: c.id || c.claim_id || `CLM${c.id}`,
-        patientName: c.patient_name || c.patientName || 'Unknown',
-        hospital: c.hospital_name || c.hospital || '',
-        date: c.created_at ? c.created_at.split('T')[0] : (c.date || ''),
-        amount: typeof c.amount === 'number' ? c.amount : parseFloat(c.claim_amount) || 0,
-        status: c.status || CLAIM_STATUS.SUBMITTED,
-        risk: c.risk_score || c.risk || 0,
-        fraudScore: c.fraud_probability || c.fraud_score || 0,
-        flags: c.flags || [],
-        department: c.department || null,
-        insuranceProvider: c.insurance_provider || null,
-        priority: c.priority || 'normal'
-      }));
-      
-      console.log(`✅ Mapped ${mapped.length} claims for display`);
-      setClaims(mapped);
-    } catch (err) {
-      console.error('❌ Failed to load claims:', err);
-      setClaims([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  fetchClaims();
-}, []);
+    };
+    
+    fetchClaims();
+  }, []);
 
-  // Filter claims based on view mode and filters
   const filteredClaims = claims.filter(claim => {
-    // View mode filter
     if (viewMode === 'flagged' && claim.status !== CLAIM_STATUS.FLAGGED) return false;
     if (viewMode === 'fraud' && claim.status !== CLAIM_STATUS.FRAUD) return false;
     if (viewMode === 'pending' && ![CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.AI_PROCESSING, CLAIM_STATUS.MANUAL_REVIEW].includes(claim.status)) return false;
 
-    // Search filter
     const matchesSearch = filters.search === '' || 
       claim.id.toLowerCase().includes(filters.search.toLowerCase()) ||
       claim.patientName.toLowerCase().includes(filters.search.toLowerCase()) ||
       claim.hospital.toLowerCase().includes(filters.search.toLowerCase());
 
-    // Status filter
     const matchesStatus = filters.status === 'all' || claim.status === filters.status;
 
-    // Risk level filter
     const matchesRisk = filters.riskLevel === 'all' || 
       (filters.riskLevel === 'low' && claim.risk <= 30) ||
       (filters.riskLevel === 'medium' && claim.risk > 30 && claim.risk <= 60) ||
       (filters.riskLevel === 'high' && claim.risk > 60 && claim.risk <= 80) ||
       (filters.riskLevel === 'critical' && claim.risk > 80);
 
-    // Company filter
     const matchesCompany = filters.company === 'all' || claim.hospital === filters.company;
 
-    // Amount range filter
     let matchesAmount = true;
     if (filters.amountRange === 'under5k') matchesAmount = claim.amount < 5000;
     else if (filters.amountRange === '5k-10k') matchesAmount = claim.amount >= 5000 && claim.amount <= 10000;
     else if (filters.amountRange === '10k-25k') matchesAmount = claim.amount > 10000 && claim.amount <= 25000;
     else if (filters.amountRange === 'over25k') matchesAmount = claim.amount > 25000;
 
-    // Date range filter
     let matchesDate = true;
     const claimDate = new Date(claim.date);
     const today = new Date();
@@ -168,7 +154,6 @@ useEffect(() => {
            matchesCompany && matchesAmount && matchesDate;
   });
 
-  // Sort claims
   const sortedClaims = [...filteredClaims].sort((a, b) => {
     let aValue = a[sortConfig.key];
     let bValue = b[sortConfig.key];
@@ -178,16 +163,11 @@ useEffect(() => {
       bValue = Number(bValue);
     }
 
-    if (aValue < bValue) {
-      return sortConfig.direction === 'asc' ? -1 : 1;
-    }
-    if (aValue > bValue) {
-      return sortConfig.direction === 'asc' ? 1 : -1;
-    }
+    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;
   });
 
-  // Calculate summary stats
   const stats = {
     total: filteredClaims.length,
     totalAmount: filteredClaims.reduce((sum, claim) => sum + claim.amount, 0),
@@ -208,22 +188,15 @@ useEffect(() => {
 
   const handleSelectClaim = (claimId) => {
     setSelectedClaims(prev => {
-      if (prev.includes(claimId)) {
-        return prev.filter(id => id !== claimId);
-      } else {
-        return [...prev, claimId];
-      }
+      if (prev.includes(claimId)) return prev.filter(id => id !== claimId);
+      return [...prev, claimId];
     });
   };
 
   const handleSelectAllChange = () => {
     const newSelectAll = !selectAll;
     setSelectAll(newSelectAll);
-    if (newSelectAll) {
-      setSelectedClaims(filteredClaims.map(claim => claim.id));
-    } else {
-      setSelectedClaims([]);
-    }
+    setSelectedClaims(newSelectAll ? filteredClaims.map(claim => claim.id) : []);
   };
 
   const handleBulkAction = (action) => {
@@ -298,7 +271,6 @@ useEffect(() => {
             </span>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-3">
             <Button 
               variant="secondary" 
@@ -344,42 +316,23 @@ useEffect(() => {
       {/* View Mode Tabs */}
       <div className="px-6 pt-6">
         <div className="flex gap-2 border-b border-gray-800">
-          <button
-            onClick={() => setViewMode('all')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'all' ? 'text-primary' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            All Claims
-            {viewMode === 'all' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('pending')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'pending' ? 'text-warning' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Pending Review
-            {viewMode === 'pending' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-warning"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('flagged')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'flagged' ? 'text-orange-500' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Flagged
-            {viewMode === 'flagged' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500"></div>}
-          </button>
-          <button
-            onClick={() => setViewMode('fraud')}
-            className={`px-4 py-2 font-medium transition-colors relative ${
-              viewMode === 'fraud' ? 'text-danger' : 'text-textSecondary hover:text-white'
-            }`}
-          >
-            Fraud Cases
-            {viewMode === 'fraud' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-danger"></div>}
-          </button>
+          {[
+            { key: 'all', label: 'All Claims', color: 'text-primary', border: 'bg-primary' },
+            { key: 'pending', label: 'Pending Review', color: 'text-warning', border: 'bg-warning' },
+            { key: 'flagged', label: 'Flagged', color: 'text-orange-500', border: 'bg-orange-500' },
+            { key: 'fraud', label: 'Fraud Cases', color: 'text-danger', border: 'bg-danger' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setViewMode(tab.key)}
+              className={`px-4 py-2 font-medium transition-colors relative ${
+                viewMode === tab.key ? tab.color : 'text-textSecondary hover:text-white'
+              }`}
+            >
+              {tab.label}
+              {viewMode === tab.key && <div className={`absolute bottom-0 left-0 w-full h-0.5 ${tab.border}`}></div>}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -392,16 +345,12 @@ useEffect(() => {
                 <FiFilter className="text-primary" />
                 Advanced Filters
               </h2>
-              <button 
-                onClick={clearFilters}
-                className="text-sm text-primary hover:underline"
-              >
+              <button onClick={clearFilters} className="text-sm text-primary hover:underline">
                 Clear all filters
               </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Search */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Search</label>
                 <div className="relative">
@@ -416,7 +365,6 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Status Filter */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Status</label>
                 <select
@@ -431,7 +379,6 @@ useEffect(() => {
                 </select>
               </div>
 
-              {/* Risk Level */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Risk Level</label>
                 <select
@@ -447,7 +394,6 @@ useEffect(() => {
                 </select>
               </div>
 
-              {/* Company/Hospital */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Hospital</label>
                 <select
@@ -463,7 +409,6 @@ useEffect(() => {
                 </select>
               </div>
 
-              {/* Date Range */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Date Range</label>
                 <select
@@ -478,7 +423,6 @@ useEffect(() => {
                 </select>
               </div>
 
-              {/* Amount Range */}
               <div>
                 <label className="block text-sm text-textSecondary mb-2">Amount Range</label>
                 <select
@@ -532,18 +476,10 @@ useEffect(() => {
               <span className="font-bold">{selectedClaims.length}</span> claims selected
             </span>
             <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('approve')}>
-                Approve
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('flag')}>
-                Flag
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('fraud')}>
-                Mark Fraud
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setSelectedClaims([])}>
-                Clear
-              </Button>
+              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('approve')}>Approve</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('flag')}>Flag</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleBulkAction('fraud')}>Mark Fraud</Button>
+              <Button size="sm" variant="secondary" onClick={() => setSelectedClaims([])}>Clear</Button>
             </div>
           </div>
         </div>
@@ -614,22 +550,16 @@ useEffect(() => {
                       <td className="px-6 py-4">
                         <div>
                           <div className="font-medium">{claim.patientName}</div>
-                          <div className="text-xs text-textSecondary">
-                            {claim.department || '-'}
-                          </div>
+                          <div className="text-xs text-textSecondary">{claim.department || '-'}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div>
                           <div>{claim.hospital}</div>
-                          <div className="text-xs text-textSecondary">
-                            {claim.insuranceProvider || '-'}
-                          </div>
+                          <div className="text-xs text-textSecondary">{claim.insuranceProvider || '-'}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div>{claim.date}</div>
-                      </td>
+                      <td className="px-6 py-4">{claim.date}</td>
                       <td className="px-6 py-4 font-medium">${claim.amount.toLocaleString()}</td>
                       <td className="px-6 py-4">
                         <StatusBadge status={claim.status} />
@@ -684,7 +614,6 @@ useEffect(() => {
               </table>
             </div>
 
-            {/* Empty State */}
             {filteredClaims.length === 0 && (
               <div className="p-12 text-center">
                 <FiFileText className="text-4xl text-textSecondary mx-auto mb-4" />
@@ -694,7 +623,6 @@ useEffect(() => {
               </div>
             )}
 
-            {/* Pagination */}
             {filteredClaims.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-800 flex items-center justify-between">
                 <p className="text-sm text-textSecondary">
@@ -704,18 +632,8 @@ useEffect(() => {
                   <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors disabled:opacity-50" disabled>
                     Previous
                   </button>
-                  <button className="px-3 py-1 bg-primary rounded-lg hover:bg-primary/90 transition-colors">
-                    1
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    2
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    3
-                  </button>
-                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">
-                    Next
-                  </button>
+                  <button className="px-3 py-1 bg-primary rounded-lg hover:bg-primary/90 transition-colors">1</button>
+                  <button className="px-3 py-1 bg-background rounded-lg border border-gray-800 hover:border-primary transition-colors">Next</button>
                 </div>
               </div>
             )}

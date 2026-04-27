@@ -75,3 +75,6 @@ __pycache__/
 *.pyc
 *.db
 *.sqlite
+node_modules/
+dist/
+build/  

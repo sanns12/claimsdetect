@@ -1,4 +1,4 @@
-# backend/core/security.py
+# backend/app/core/security.py
 
 from datetime import datetime, timedelta
 from fastapi import HTTPException, Depends
@@ -59,13 +59,17 @@ async def get_current_user(
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    users = await get_users_collection()
-    user = users.find_one({"id": int(user_id)})
+    db = await get_users_collection()
+
+    async with db.execute(
+        "SELECT * FROM users WHERE id = ?", (int(user_id),)
+    ) as cursor:
+        user = await cursor.fetchone()
 
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    return user
+    return dict(user)  # convert Row to dict so payload fields are accessible
 
 
 # -------------------------------

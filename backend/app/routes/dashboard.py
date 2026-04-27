@@ -1,12 +1,10 @@
-datetime# backend/routes/dashboard.py
+# backend/app/routes/dashboard.py
 
 from fastapi import APIRouter, Depends
-from typing import List
 from datetime import datetime
 from collections import defaultdict
 
 from app.core.security import get_current_user
-from backend.app.routes import claims
 from database import get_claims_collection
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -20,32 +18,27 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 async def get_dashboard_stats(
     current_user: dict = Depends(get_current_user)
 ):
-    claims_collection = await get_claims_collection()
+    db = await get_claims_collection()
 
-    # ------------------------------------
-    # Scope Claims Based on Role
-    # ------------------------------------
     if current_user["role"] == "user":
-        query = {"user_id": current_user["id"]}
+        async with db.execute(
+            "SELECT * FROM claims WHERE user_id = ?",
+            (current_user["id"],)
+        ) as cursor:
+            claims = await cursor.fetchall()
     else:
-        # hospital or insurance → see all
-        query = {}
+        async with db.execute("SELECT * FROM claims") as cursor:
+            claims = await cursor.fetchall()
 
-    claims = list(claims_collection.find(query))
     total = len(claims)
-    approved = len([c for c in claims if c["status"] == "Approved"])
-    flagged = len([c for c in claims if c["status"] == "Flagged"])
-    fraud = len([c for c in claims if c["status"] == "Fraud"])
-
-    pending = len([
-        c for c in claims
-        if c["status"] in ["Submitted", "AI Processing", "Manual Review"]
-    ])
-
-    total_amount = sum(c.get("claim_amount", 0) for c in claims)
+    approved = sum(1 for c in claims if c["status"] == "Approved")
+    flagged = sum(1 for c in claims if c["status"] == "Flagged")
+    fraud = sum(1 for c in claims if c["status"] == "Fraud")
+    pending = sum(1 for c in claims if c["status"] in ["Submitted", "AI Processing", "Manual Review"])
+    total_amount = sum(c["claim_amount"] or 0 for c in claims)
     today = datetime.utcnow().date().isoformat()
-    today_claims = len([c for c in claims if c["created_at"].startswith(today)])
-    avg_processing_time = 0  # compute from admission/discharge or leave as 0
+    today_claims = sum(1 for c in claims if c["created_at"] and c["created_at"].startswith(today))
+
     return {
         "total_claims": total,
         "total_amount": total_amount,
@@ -54,77 +47,80 @@ async def get_dashboard_stats(
         "fraud": fraud,
         "pending_review": pending,
         "today_claims": today_claims,
-        "avg_processing_time": 0,       # placeholder until you compute it
+        "avg_processing_time": 0,
         "fraud_probability": round(fraud / total, 2) if total else 0
     }
 
 
 # ======================================================
-# FRAUD TRENDS (DB-Based Monthly Aggregation)
+# FRAUD TRENDS
 # ======================================================
 
 @router.get("/fraud-trends")
 async def get_fraud_trends(
     current_user: dict = Depends(get_current_user)
 ):
-    claims_collection = await get_claims_collection()
+    db = await get_claims_collection()
 
     if current_user["role"] == "user":
-        query = {"user_id": current_user["id"]}
+        async with db.execute(
+            "SELECT status, created_at FROM claims WHERE user_id = ? AND status IN ('Flagged', 'Fraud')",
+            (current_user["id"],)
+        ) as cursor:
+            claims = await cursor.fetchall()
     else:
-        query = {}
-
-    claims = claims_collection.find(query, limit=None)
+        async with db.execute(
+            "SELECT status, created_at FROM claims WHERE status IN ('Flagged', 'Fraud')"
+        ) as cursor:
+            claims = await cursor.fetchall()
 
     monthly_counts = defaultdict(int)
-
     for claim in claims:
-        if claim["status"] in ["Flagged", "Fraud"]:
-            created = datetime.fromisoformat(claim["created_at"])
-            month_label = created.strftime("%b")
+        if claim["created_at"]:
+            month_label = datetime.fromisoformat(claim["created_at"]).strftime("%b")
             monthly_counts[month_label] += 1
 
-    # Sort months chronologically
-    ordered_months = [
-        "Jan","Feb","Mar","Apr","May","Jun",
-        "Jul","Aug","Sep","Oct","Nov","Dec"
-    ]
+    ordered_months = ["Jan","Feb","Mar","Apr","May","Jun",
+                      "Jul","Aug","Sep","Oct","Nov","Dec"]
 
-    result = [
+    return [
         {"month": m, "amount": monthly_counts.get(m, 0)}
         for m in ordered_months
     ]
 
-    return result
-
 
 # ======================================================
-# ALERTS (Dynamic)
+# ALERTS
 # ======================================================
 
 @router.get("/alerts")
 async def get_recent_alerts(
     current_user: dict = Depends(get_current_user)
 ):
-    claims_collection = await get_claims_collection()
+    db = await get_claims_collection()
 
     if current_user["role"] == "user":
-        query = {"user_id": current_user["id"]}
+        async with db.execute(
+            """SELECT * FROM claims WHERE user_id = ?
+               AND status IN ('Flagged', 'Fraud')
+               ORDER BY created_at DESC LIMIT 10""",
+            (current_user["id"],)
+        ) as cursor:
+            claims = await cursor.fetchall()
     else:
-        query = {}
+        async with db.execute(
+            """SELECT * FROM claims WHERE status IN ('Flagged', 'Fraud')
+               ORDER BY created_at DESC LIMIT 10"""
+        ) as cursor:
+            claims = await cursor.fetchall()
 
-    claims = claims_collection.find(query, limit=10)
-
-    alerts = []
-
-    for claim in claims:
-        if claim["status"] in ["Flagged", "Fraud"]:
-            alerts.append({
-                "id": str(claim["id"]),
-                "type": "fraud",
-                "message": f"High risk detected - Claim CLM{claim['id']:03d}",
-                "time": claim["created_at"],
-                "severity": "high" if claim["status"] == "Fraud" else "medium"
-            })
-
-    return alerts
+    return [
+        {
+            "id": str(c["id"]),
+            "type": "fraud",
+            "message": f"High risk detected - Claim CLM{c['id']:03d}",
+            "time": c["created_at"],
+            "severity": "high" if c["status"] == "Fraud" else "medium"
+        }
+        for c in claims
+    ]

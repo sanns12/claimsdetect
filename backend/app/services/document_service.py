@@ -1,4 +1,4 @@
-# services/document_service.py
+# backend/app/services/document_service.py
 
 import hashlib
 from fastapi import UploadFile, HTTPException
@@ -12,7 +12,7 @@ async def process_document(
 ) -> dict:
     """
     Handles OCR extraction + validation against submitted form data.
-    Returns structured document verification result.
+    Mismatches are flagged but do NOT block claim submission.
     """
 
     try:
@@ -32,24 +32,22 @@ async def process_document(
             extracted_text
         )
 
-        if mismatches:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "message": "Document validation failed",
-                    "mismatches": mismatches
-                }
-            )
+        # Flag mismatches but don't block the claim
+        mismatch_flag = 1 if mismatches else 0
 
-        # Instead of storing raw extracted text (PHI risk),
-        # store only secure hash
+        if mismatches:
+            print(f"⚠️ Document mismatches detected: {mismatches}")
+
+        # Store secure hash instead of raw text (PHI risk)
         document_hash = hashlib.sha256(
             extracted_text.encode()
         ).hexdigest()
 
         return {
-            "document_verified": True,
-            "document_hash": document_hash
+            "document_verified": len(mismatches) == 0,
+            "document_hash": document_hash,
+            "mismatches": mismatches,
+            "mismatch_flag": mismatch_flag
         }
 
     except HTTPException:
@@ -59,4 +57,3 @@ async def process_document(
             status_code=500,
             detail=f"Document processing error: {str(e)}"
         )
-    

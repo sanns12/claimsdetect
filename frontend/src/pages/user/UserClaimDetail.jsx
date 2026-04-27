@@ -35,7 +35,6 @@ export default function UserClaimDetail() {
   const [limeFactors, setLimeFactors] = useState([]);
   const [loadingExplanation, setLoadingExplanation] = useState(false);
 
-  // Load claim data
   useEffect(() => {
     loadClaimData();
   }, [id]);
@@ -45,25 +44,31 @@ export default function UserClaimDetail() {
     setError('');
     
     try {
-      // Get claim details from API
       const claimData = await getClaimById(id);
       const formattedClaim = formatClaimFromApi(claimData);
       setClaim(formattedClaim);
 
-      // Get LIME explanation
-      await loadLimeExplanation();
+      // Load LIME explanation after claim is set, passing the claim data directly
+      setLoadingExplanation(true);
+      try {
+        const explanation = await getLimeExplanation(id);
+        setLimeFactors(explanation.factors);
+      } catch (err) {
+        console.error('Failed to load LIME explanation:', err);
+        setLimeFactors(generateMockLimeFactors(formattedClaim));
+      } finally {
+        setLoadingExplanation(false);
+      }
       
     } catch (err) {
       console.error('Failed to load claim:', err);
       setError('Failed to load claim details. Please try again.');
       
-      // Fallback to localStorage
       const storedClaims = JSON.parse(localStorage.getItem('userClaims') || '[]');
       const foundClaim = storedClaims.find(c => c.id === id);
       
       if (foundClaim) {
         setClaim(foundClaim);
-        // Generate mock LIME factors
         setLimeFactors(generateMockLimeFactors(foundClaim));
       } else {
         setTimeout(() => {
@@ -74,22 +79,6 @@ export default function UserClaimDetail() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadLimeExplanation = async () => {
-    setLoadingExplanation(true);
-    try {
-      const explanation = await getLimeExplanation(id);
-      setLimeFactors(explanation.factors);
-    } catch (err) {
-      console.error('Failed to load LIME explanation:', err);
-      // Generate mock factors if API fails
-      if (claim) {
-        setLimeFactors(generateMockLimeFactors(claim));
-      }
-    } finally {
-      setLoadingExplanation(false);
     }
   };
 
@@ -136,7 +125,6 @@ export default function UserClaimDetail() {
     try {
       const result = await uploadAdditionalDocs(id, files);
       
-      // Update local claim with new files
       const updatedClaim = {
         ...claim,
         documents: [...(claim.documents || []), ...result.uploadedFiles]
@@ -294,7 +282,7 @@ export default function UserClaimDetail() {
       {/* Main Content */}
       <main className="p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Claim Details & Timeline */}
+          {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Claim Information Card */}
             <div className="bg-surface rounded-xl border border-gray-800 p-6">
@@ -330,7 +318,7 @@ export default function UserClaimDetail() {
                   <p className="text-textSecondary text-sm mb-1">Disease/Condition</p>
                   <p className="font-medium flex items-center gap-2">
                     <FiActivity className="text-primary" />
-                    {claim.disease || 'General Checkup'}
+                    {claim.diagnosis || claim.disease || 'N/A'}
                   </p>
                 </div>
                 <div>
@@ -346,7 +334,7 @@ export default function UserClaimDetail() {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-textSecondary text-sm mb-1">Hospital</p>
-                    <p className="font-medium">{claim.hospital || 'City General Hospital'}</p>
+                    <p className="font-medium">{claim.hospital || claim.hospitalName || 'N/A'}</p>
                   </div>
                   {getStayDuration() && (
                     <div className="text-right">
@@ -391,7 +379,7 @@ export default function UserClaimDetail() {
             </div>
           </div>
 
-          {/* Right Column - Risk Score & Documents */}
+          {/* Right Column */}
           <div className="space-y-6">
             {/* Risk Score Card */}
             <div className="bg-surface rounded-xl border border-gray-800 p-6">
@@ -401,7 +389,6 @@ export default function UserClaimDetail() {
                 <RiskScore score={claim.risk || 45} />
               </div>
 
-              {/* LIME Explanation */}
               <LIMEExplanation 
                 factors={limeFactors}
                 loading={loadingExplanation}
@@ -412,7 +399,6 @@ export default function UserClaimDetail() {
             <div className="bg-surface rounded-xl border border-gray-800 p-6">
               <h2 className="text-lg font-bold mb-4">Documents</h2>
               
-              {/* Existing Documents */}
               {claim.documents && claim.documents.length > 0 ? (
                 <div className="space-y-3 mb-4">
                   {claim.documents.map((doc, index) => (
@@ -434,7 +420,6 @@ export default function UserClaimDetail() {
                 <p className="text-textSecondary text-sm mb-4">No documents uploaded yet</p>
               )}
 
-              {/* Upload New Documents */}
               {!showUploader ? (
                 <Button 
                   variant="secondary" 

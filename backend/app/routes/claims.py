@@ -1,4 +1,4 @@
-# backend/routes/claims.py
+# backend/app/routes/claims.py
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from typing import Optional
@@ -10,15 +10,15 @@ from database import get_claims_collection
 router = APIRouter(prefix="/claims", tags=["Claims"])
 
 
-# ======================================================
 # SUBMIT CLAIM
-# ======================================================
 
 @router.post("/submit")
 async def submit_claim(
     patient_name: str = Form(...),
     age: int = Form(...),
     gender: str = Form("M"),
+    hospital_name: str = Form(""),
+    disease: str = Form("General"),
     claim_amount: float = Form(...),
     admission_date: str = Form(...),
     discharge_date: str = Form(...),
@@ -28,26 +28,25 @@ async def submit_claim(
     supporting_file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
-
     claim_data = {
         "patient_name": patient_name,
         "age": age,
         "gender": gender,
+        "hospital_name": hospital_name, 
+        "disease": disease,
         "claim_amount": claim_amount,
         "admission_date": admission_date,
         "discharge_date": discharge_date,
         "billed_items_count": billed_items_count,
         "previous_claims_count": previous_claims_count,
         "doc_missing_flag": doc_missing_flag,
-        "user_id": current_user["id"]  # from DB user object
+        "user_id": current_user["id"]
     }
 
     return await process_claim(claim_data, supporting_file)
 
 
-# ======================================================
 # GET CLAIMS (User Scope)
-# ======================================================
 
 @router.get("/")
 async def get_claims(
@@ -55,14 +54,20 @@ async def get_claims(
     limit: int = 100,
     current_user: dict = Depends(get_current_user)
 ):
-    claims_collection = await get_claims_collection()
-
-    query = {"user_id": current_user["id"]}
+    db = await get_claims_collection()
 
     if status:
-        query["status"] = status
-
-    claims = claims_collection.find(query, limit=limit)
+        async with db.execute(
+            "SELECT * FROM claims WHERE user_id = ? AND status = ? LIMIT ?",
+            (current_user["id"], status, limit)
+        ) as cursor:
+            claims = await cursor.fetchall()
+    else:
+        async with db.execute(
+            "SELECT * FROM claims WHERE user_id = ? LIMIT ?",
+            (current_user["id"], limit)
+        ) as cursor:
+            claims = await cursor.fetchall()
 
     formatted = [
         {
@@ -70,7 +75,7 @@ async def get_claims(
             "patient_name": c["patient_name"],
             "amount": c["claim_amount"],
             "status": c["status"],
-            "risk_score": c.get("risk_score", 0),
+            "risk_score": c["risk_score"] or 0,
             "created_at": c["created_at"]
         }
         for c in claims
@@ -82,16 +87,14 @@ async def get_claims(
     }
 
 
-# ======================================================
 # GET SINGLE CLAIM (User Scope)
-# ======================================================
 
 @router.get("/{claim_id}")
 async def get_claim(
     claim_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    claims_collection = await get_claims_collection()
+    db = await get_claims_collection()
 
     if claim_id.startswith("CLM"):
         try:
@@ -104,10 +107,11 @@ async def get_claim(
         except:
             raise HTTPException(status_code=400, detail="Invalid claim ID")
 
-    claim = claims_collection.find_one({
-        "id": claim_num,
-        "user_id": current_user["id"]
-    })
+    async with db.execute(
+        "SELECT * FROM claims WHERE id = ? AND user_id = ?",
+        (claim_num, current_user["id"])
+    ) as cursor:
+        claim = await cursor.fetchone()
 
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -121,8 +125,8 @@ async def get_claim(
         "duration_days": claim["duration_days"],
         "claim_amount": claim["claim_amount"],
         "status": claim["status"],
-        "risk_score": claim.get("risk_score", 0),
-        "fraud_probability": claim.get("fraud_probability", 0),
-        "factors": claim.get("lime_explanation", []),
+        "risk_score": claim["risk_score"] or 0,
+        "fraud_probability": claim["fraud_probability"] or 0,
+        "factors": claim["lime_explanation"] or [],
         "created_at": claim["created_at"]
     }
