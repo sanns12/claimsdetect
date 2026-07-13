@@ -3,22 +3,35 @@ Main entry point for Document Intelligence Engine
 """
 
 from .config import Config
-from .ocr_pipeline import OCRPipeline
-from .text_cleaner import TextCleaner
-from .embedding_engine import EmbeddingEngine
-from .similarity_checker import SimilarityChecker
-from .mismatch_detector import MismatchDetector
-from .document_scorer import DocumentScorer
 from .document_stub import run_stub, fallback_stub
 
 # Initialize config and components
 config = Config()
-ocr_pipeline = OCRPipeline(config)
-text_cleaner = TextCleaner()
-embedding_engine = EmbeddingEngine(config)
-similarity_checker = SimilarityChecker(config, embedding_engine)
-mismatch_detector = MismatchDetector(config, similarity_checker)
-document_scorer = DocumentScorer(config)
+ocr_pipeline = None
+text_cleaner = None
+embedding_engine = None
+similarity_checker = None
+mismatch_detector = None
+document_scorer = None
+
+if not config.STUB_MODE:
+    try:
+        from .ocr_pipeline import OCRPipeline
+        from .text_cleaner import TextCleaner
+        from .embedding_engine import EmbeddingEngine
+        from .similarity_checker import SimilarityChecker
+        from .mismatch_detector import MismatchDetector
+        from .document_scorer import DocumentScorer
+
+        ocr_pipeline = OCRPipeline(config)
+        text_cleaner = TextCleaner()
+        embedding_engine = EmbeddingEngine(config)
+        similarity_checker = SimilarityChecker(config, embedding_engine)
+        mismatch_detector = MismatchDetector(config, similarity_checker)
+        document_scorer = DocumentScorer(config)
+    except ImportError as err:
+        print(f"⚠️ Document engine disabled because optional dependency failed to import: {err}")
+        config.STUB_MODE = True
 
 def run(claim_id: str, document_paths: list, claim_metadata: dict = None) -> dict:
     """

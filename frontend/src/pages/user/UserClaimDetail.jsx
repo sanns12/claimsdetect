@@ -398,12 +398,12 @@ export default function UserClaimDetail() {
               <h2 className="text-lg font-bold mb-4">ML Risk Analysis</h2>
               
               <div className="flex justify-center mb-6">
-                <RiskScore score={claim.risk || 45} />
+                <RiskScore score={claim.risk} />
               </div>
 
               {/* LIME Explanation */}
               <LIMEExplanation 
-                factors={limeFactors}
+                claimData={claim}
                 loading={loadingExplanation}
               />
             </div>

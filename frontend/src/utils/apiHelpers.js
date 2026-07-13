@@ -35,6 +35,36 @@ export const formatClaimForApi = (formData) => {
 
 // Format API response for frontend display
 export const formatClaimFromApi = (apiClaim) => {
+  const rawRisk = apiClaim.risk ?? apiClaim.risk_score ?? apiClaim.fraudScore ?? apiClaim.fraud_score ?? 0;
+  const normalizeRisk = (value) => {
+    if (typeof value === 'number') {
+      return value <= 1 ? Math.round(value * 100) : Math.round(value);
+    }
+    return 0;
+  };
+
+  const normalizeStatus = (value) => {
+    if (!value) return 'Submitted';
+    const status = String(value).trim().toLowerCase();
+    switch (status) {
+      case 'submitted':
+        return 'Submitted';
+      case 'approved':
+        return 'Approved';
+      case 'flagged':
+        return 'Flagged';
+      case 'fraud':
+      case 'fraud detected':
+        return 'Fraud';
+      case 'manual review':
+        return 'Manual Review';
+      default:
+        return String(value);
+    }
+  };
+
+  const normalizedRisk = normalizeRisk(rawRisk);
+
   return {
     id: apiClaim.id || apiClaim.claim_id,
     patientId: apiClaim.patient_id,
@@ -45,10 +75,12 @@ export const formatClaimFromApi = (apiClaim) => {
     amount: typeof apiClaim.claim_amount === 'number' 
       ? `$${apiClaim.claim_amount.toLocaleString()}` 
       : apiClaim.amount || '$0',
-    status: apiClaim.status || 'Submitted',
-    risk: apiClaim.risk_score || 0,
+    status: normalizeStatus(apiClaim.status),
+    risk: normalizedRisk,
+    risk_score: normalizedRisk,
     department: apiClaim.department,
     diagnosis: apiClaim.diagnosis || apiClaim.disease,
+    disease: apiClaim.disease || apiClaim.diagnosis,
     doctor: apiClaim.doctor_name,
     insuranceProvider: apiClaim.insurance_provider,
     policyNumber: apiClaim.policy_number,
@@ -57,6 +89,7 @@ export const formatClaimFromApi = (apiClaim) => {
     hospital: apiClaim.hospital_name,
     documents: apiClaim.documents || [],
     submittedAt: apiClaim.submitted_at || apiClaim.created_at,
-    lastUpdated: apiClaim.updated_at
+    lastUpdated: apiClaim.updated_at,
+    mismatchWarnings: apiClaim.mismatch_warnings || []
   };
 };

@@ -1,0 +1,14 @@
+Patient Name: John Doe
+Patient ID: JD-2026-001
+Hospital: City General Hospital
+Admission Date: 2026-07-01
+Discharge Date: 2026-07-05
+Diagnosis: Respiratory Infection
+Treatment Summary:
+- Initial assessment and diagnostics
+- Oxygen therapy and antibiotics administered
+- Daily monitoring of vitals and respiratory function
+- Discharge plan includes follow-up visit in 7 days
+
+Claim Amount: $4,250.00
+Notes: Supporting documentation includes hospital admission record, treatment summary, and prescribed medications.

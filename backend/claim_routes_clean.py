@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from auth import get_current_user
+from document_validator import validate_claim_against_document
 import shutil
 import os
 from pathlib import Path
@@ -18,31 +19,58 @@ MOCK_CLAIMS = [
         "id": "CLM001",
         "claim_id": "CLM001",
         "amount": 1500.00,
-        "status": "pending",
+        "claim_amount": 1500.00,
+        "age": 29,
+        "disease": "Respiratory Infection",
+        "admission_date": "2026-02-15",
+        "discharge_date": "2026-02-20",
+        "patient_name": "Alice Smith",
+        "hospital_name": "City General Hospital",
+        "status": "Submitted",
         "date": "2026-03-01",
         "policy_id": "POL-12345",
         "fraud_score": 0.15,
-        "document_score": 0.72
+        "document_score": 0.72,
+        "risk_score": 15,
+        "risk": 15
     },
     {
         "id": "CLM002",
         "claim_id": "CLM002",
         "amount": 3200.00,
-        "status": "approved",
+        "claim_amount": 3200.00,
+        "age": 42,
+        "disease": "Orthopedic",
+        "admission_date": "2026-02-20",
+        "discharge_date": "2026-02-25",
+        "patient_name": "Bob Johnson",
+        "hospital_name": "City General Hospital",
+        "status": "Approved",
         "date": "2026-02-28",
         "policy_id": "POL-12345",
         "fraud_score": 0.08,
-        "document_score": 0.85
+        "document_score": 0.85,
+        "risk_score": 8,
+        "risk": 8
     },
     {
         "id": "CLM003",
         "claim_id": "CLM003",
         "amount": 850.00,
-        "status": "flagged",
+        "claim_amount": 850.00,
+        "age": 35,
+        "disease": "General Checkup",
+        "admission_date": "2026-02-27",
+        "discharge_date": "2026-02-27",
+        "patient_name": "N/A",
+        "hospital_name": "City General Hospital",
+        "status": "Flagged",
         "date": "2026-02-27",
         "policy_id": "POL-67890",
         "fraud_score": 0.45,
-        "document_score": 0.34
+        "document_score": 0.34,
+        "risk_score": 45,
+        "risk": 45
     }
 ]
 
@@ -96,27 +124,83 @@ async def submit_claim(
         
         print(f"✅ File saved to: {file_path}")
         
-        # TODO: Call your Document Engine here
-        # from document_engine.main import run as doc_run
-        # doc_result = doc_run(f"CLM{len(MOCK_CLAIMS)+1:03d}", [str(file_path)], {"claim_amount": claim_amount})
+        mismatch_warnings = []
+        if file_path.suffix.lower() == '.txt':
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    extracted_text = f.read()
+                mismatch_warnings = validate_claim_against_document({
+                    "claim_amount": str(claim_amount),
+                    "admission_date": admission_date,
+                    "discharge_date": discharge_date
+                }, extracted_text)
+            except Exception as e:
+                print(f"⚠️ Document validation failed: {e}")
         
-        # TODO: Call Fraud Engine here
-        # fraud_result = run_fraud_engine({"claim_id": f"CLM{len(MOCK_CLAIMS)+1:03d}", "claim_amount": claim_amount})
+        # Simple risk logic for faster prototype feedback
+        suspicious_diseases = {"Cardiovascular", "Neurological", "Oncology", "Infectious Disease"}
+        if claim_amount > 25000 or disease in suspicious_diseases:
+            status = "Flagged"
+            fraud_score = 0.72
+            document_score = 0.48
+        else:
+            status = "Approved"
+            fraud_score = 0.12
+            document_score = 0.85
+
+        if mismatch_warnings:
+            status = "Flagged"
+            fraud_score = max(fraud_score, 0.7)
+            document_score = min(document_score, 0.35)
+            message = "Claim submitted successfully, but supporting document mismatches were detected."
+            print(f"⚠️ Mismatch detected, forcing flag: {mismatch_warnings}")
+        elif claim_amount > 25000 or disease in suspicious_diseases:
+            status = "Flagged"
+            fraud_score = 0.72
+            document_score = 0.48
+            message = "Claim submitted successfully, but this claim was flagged for review."
+        else:
+            status = "Approved"
+            fraud_score = 0.12
+            document_score = 0.85
+            message = "Claim submitted successfully"
         
         # Mock response
         new_claim = {
             "id": f"CLM{len(MOCK_CLAIMS)+1:03d}",
             "claim_id": f"CLM{len(MOCK_CLAIMS)+1:03d}",
+            "claimId": f"CLM{len(MOCK_CLAIMS)+1:03d}",
             "amount": claim_amount,
-            "status": "pending",
+            "claim_amount": claim_amount,
+            "claimAmount": claim_amount,
+            "age": age,
+            "disease": disease,
+            "admission_date": admission_date,
+            "discharge_date": discharge_date,
+            "admissionDate": admission_date,
+            "dischargeDate": discharge_date,
+            "status": status,
+            "submitted_at": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "submittedAt": datetime.now().isoformat(),
+            "lastUpdated": datetime.now().isoformat(),
             "date": datetime.now().strftime("%Y-%m-%d"),
             "policy_id": "POL-DEFAULT",
-            "fraud_score": 0.15,
-            "document_score": 0.72,
+            "policyId": "POL-DEFAULT",
+            "fraud_score": fraud_score,
+            "document_score": document_score,
+            "fraudScore": fraud_score,
+            "documentScore": document_score,
             "patient_name": patient_name,
             "hospital_name": hospital_name,
-            "message": "Claim submitted successfully",
-            "file_name": supporting_file.filename
+            "patientName": patient_name,
+            "hospitalName": hospital_name,
+            "message": message,
+            "file_name": supporting_file.filename,
+            "fileName": supporting_file.filename,
+            "mismatch_warnings": mismatch_warnings,
+            "risk_score": round(fraud_score * 100, 0),
+            "risk": round(fraud_score * 100, 0)
         }
         
         # Add to mock claims for testing
