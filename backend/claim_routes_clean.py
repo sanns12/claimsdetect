@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from auth import get_current_user
 from document_validator import validate_claim_against_document
+from ocr_util import extract_text_from_file
 import shutil
 import os
 from pathlib import Path
@@ -115,6 +116,7 @@ async def submit_claim(
     print(f"📝 Submitting claim for patient: {patient_name}")
     print(f"💰 Claim amount: ${claim_amount}")
     print(f"📄 File received: {supporting_file.filename}")
+    print(f"📄 Content type: {supporting_file.content_type}")
     
     try:
         # Save the uploaded file temporarily
@@ -124,45 +126,79 @@ async def submit_claim(
         
         print(f"✅ File saved to: {file_path}")
         
+        # Read file bytes for OCR
+        file_bytes = file_path.read_bytes()
+        
+        # Extract text from the uploaded file using OCR utility
+        extracted_text = ""
         mismatch_warnings = []
-        if file_path.suffix.lower() == '.txt':
-            try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    extracted_text = f.read()
+        
+        try:
+            # Determine content type from file extension
+            file_ext = file_path.suffix.lower()
+            
+            # Map extensions to content types
+            if file_ext == '.pdf':
+                content_type = 'application/pdf'
+            elif file_ext in ['.jpg', '.jpeg']:
+                content_type = 'image/jpeg'
+            elif file_ext == '.png':
+                content_type = 'image/png'
+            elif file_ext == '.txt':
+                content_type = 'text/plain'
+            else:
+                content_type = supporting_file.content_type
+            
+            # Extract text using the OCR utility
+            extracted_text = extract_text_from_file(file_bytes, supporting_file.filename, content_type)
+            print(f"✅ Extracted text length: {len(extracted_text)} characters")
+            print(f"📝 Extracted text preview: {extracted_text[:200]}...")
+            
+            # Only validate if we got some text
+            if extracted_text and len(extracted_text.strip()) > 10:
                 mismatch_warnings = validate_claim_against_document({
                     "claim_amount": str(claim_amount),
                     "admission_date": admission_date,
                     "discharge_date": discharge_date
                 }, extracted_text)
-            except Exception as e:
-                print(f"⚠️ Document validation failed: {e}")
+                print(f"⚠️ Mismatch warnings: {mismatch_warnings}")
+            else:
+                print(f"⚠️ Not enough text extracted from document (length: {len(extracted_text)})")
+                mismatch_warnings.append("Could not extract sufficient text from document")
+                
+        except Exception as e:
+            print(f"❌ OCR/Validation failed: {e}")
+            mismatch_warnings.append(f"Document processing error: {str(e)}")
         
         # Simple risk logic for faster prototype feedback
         suspicious_diseases = {"Cardiovascular", "Neurological", "Oncology", "Infectious Disease"}
-        if claim_amount > 25000 or disease in suspicious_diseases:
-            status = "Flagged"
-            fraud_score = 0.72
-            document_score = 0.48
-        else:
-            status = "Approved"
-            fraud_score = 0.12
-            document_score = 0.85
-
+        
+        # Start with default risk
+        risk_score = 0.0
+        status = "Approved"
+        fraud_score = 0.12
+        document_score = 0.85
+        
+        # Check if there are any mismatches
         if mismatch_warnings:
+            # If any mismatch warnings exist, flag the claim
             status = "Flagged"
-            fraud_score = max(fraud_score, 0.7)
-            document_score = min(document_score, 0.35)
-            message = "Claim submitted successfully, but supporting document mismatches were detected."
-            print(f"⚠️ Mismatch detected, forcing flag: {mismatch_warnings}")
+            fraud_score = 0.8
+            document_score = 0.2
+            risk_score = 80
+            message = "Claim submitted but document mismatches detected!"
+            print(f"🚨 Mismatch detected, flagging claim: {mismatch_warnings}")
         elif claim_amount > 25000 or disease in suspicious_diseases:
             status = "Flagged"
             fraud_score = 0.72
             document_score = 0.48
+            risk_score = 72
             message = "Claim submitted successfully, but this claim was flagged for review."
         else:
             status = "Approved"
             fraud_score = 0.12
             document_score = 0.85
+            risk_score = 12
             message = "Claim submitted successfully"
         
         # Mock response
@@ -199,8 +235,9 @@ async def submit_claim(
             "file_name": supporting_file.filename,
             "fileName": supporting_file.filename,
             "mismatch_warnings": mismatch_warnings,
-            "risk_score": round(fraud_score * 100, 0),
-            "risk": round(fraud_score * 100, 0)
+            "risk_score": risk_score,
+            "risk": risk_score,
+            "extracted_text_preview": extracted_text[:500] if extracted_text else ""
         }
         
         # Add to mock claims for testing
@@ -210,6 +247,8 @@ async def submit_claim(
         
     except Exception as e:
         print(f"❌ Error submitting claim: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         supporting_file.file.close()
