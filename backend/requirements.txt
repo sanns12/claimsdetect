@@ -11,3 +11,4 @@ pandas==2.1.3
 numpy==1.26.4
 xgboost==2.0.3
 python-magic==0.4.27
+networkx
