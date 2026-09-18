@@ -72,8 +72,8 @@ export const uploadAdditionalDocs = async (claimId, files) => {
   }
 };
 
-// Get LIME explanation
-export const getLimeExplanation = async (claimId) => {
+// Get SHAP explanation of the ML prediction (response.shap)
+export const getExplanation = async (claimId) => {
   try {
     const response = await API.get(`/claims/${claimId}/explain`);
     return response.data;

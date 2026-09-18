@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
 import RiskScore from '../../components/RiskScore';
-import LIMEExplanation from '../../components/LIMEExplanation';
+import SHAPExplanation from '../../components/SHAPExplanation';
 import FileUploader from '../../components/FileUploader';
 import { 
   FiArrowLeft, 
@@ -20,7 +20,7 @@ import {
   FiRefreshCw
 } from 'react-icons/fi';
 import { CLAIM_STATUS } from '../../utils/constants';
-import { getClaimById, getLimeExplanation, uploadAdditionalDocs } from '../../services/claims';
+import { getClaimById, getExplanation, uploadAdditionalDocs } from '../../services/claims';
 import { formatClaimFromApi } from '../../utils/apiHelpers';
 
 export default function UserClaimDetail() {
@@ -32,7 +32,7 @@ export default function UserClaimDetail() {
   const [showUploader, setShowUploader] = useState(false);
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [limeFactors, setLimeFactors] = useState([]);
+  const [shap, setShap] = useState(null);
   const [loadingExplanation, setLoadingExplanation] = useState(false);
 
   // Load claim data
@@ -50,8 +50,8 @@ export default function UserClaimDetail() {
       const formattedClaim = formatClaimFromApi(claimData);
       setClaim(formattedClaim);
 
-      // Get LIME explanation
-      await loadLimeExplanation();
+      // Get SHAP explanation of the ML prediction
+      await loadExplanation();
       
     } catch (err) {
       console.error('Failed to load claim:', err);
@@ -63,8 +63,6 @@ export default function UserClaimDetail() {
       
       if (foundClaim) {
         setClaim(foundClaim);
-        // Generate mock LIME factors
-        setLimeFactors(generateMockLimeFactors(foundClaim));
       } else {
         setTimeout(() => {
           navigate('/user/claims', { 
@@ -77,46 +75,18 @@ export default function UserClaimDetail() {
     }
   };
 
-  const loadLimeExplanation = async () => {
+  const loadExplanation = async () => {
     setLoadingExplanation(true);
     try {
-      const explanation = await getLimeExplanation(id);
-      setLimeFactors(explanation.factors);
+      const explanation = await getExplanation(id);
+      setShap(explanation.shap || null);
     } catch (err) {
-      console.error('Failed to load LIME explanation:', err);
-      // Generate mock factors if API fails
-      if (claim) {
-        setLimeFactors(generateMockLimeFactors(claim));
-      }
+      // No explanation is shown rather than a made-up one.
+      console.error('Failed to load SHAP explanation:', err);
+      setShap(null);
     } finally {
       setLoadingExplanation(false);
     }
-  };
-
-  const generateMockLimeFactors = (claimData) => {
-    const amount = parseFloat(claimData.amount?.replace('$', '') || 5000);
-    const age = parseInt(claimData.age) || 35;
-    
-    return [
-      { 
-        name: 'Claim Amount', 
-        impact: amount > 10000 ? 42 : amount > 5000 ? 28 : 15,
-        color: amount > 10000 ? 'high' : amount > 5000 ? 'medium' : 'low',
-        description: amount > 10000 ? 'Amount significantly exceeds average' : 'Amount within normal range'
-      },
-      { 
-        name: 'Hospital Stay Duration', 
-        impact: 35,
-        color: 'medium',
-        description: 'Duration matches typical pattern for this condition'
-      },
-      { 
-        name: 'Age Factor', 
-        impact: age > 60 ? 30 : age < 18 ? 25 : 18,
-        color: age > 60 ? 'high' : age < 18 ? 'medium' : 'low',
-        description: age > 60 ? 'Higher risk demographic' : 'Standard risk profile'
-      }
-    ];
   };
 
   const handleFileDrop = (acceptedFiles) => {
@@ -398,12 +368,12 @@ export default function UserClaimDetail() {
               <h2 className="text-lg font-bold mb-4">ML Risk Analysis</h2>
               
               <div className="flex justify-center mb-6">
-                <RiskScore score={claim.risk || 45} />
+                <RiskScore score={claim.risk} />
               </div>
 
-              {/* LIME Explanation */}
-              <LIMEExplanation 
-                factors={limeFactors}
+              {/* SHAP Explanation */}
+              <SHAPExplanation
+                shap={shap}
                 loading={loadingExplanation}
               />
             </div>

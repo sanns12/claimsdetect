@@ -1,166 +1,132 @@
 """
-Fraud Predictor - Main entry point for fraud detection
-Takes claim data, builds features, and returns fraud score with explanations
+Fraud Predictor - ML inference only.
+
+Responsibility: turn the feature contract into a fraud probability with the
+trained model bundle.  It does NOT compute document similarity, graph
+relationships or behavioral statistics - those arrive as upstream features
+(see feature_builder) - and it does NOT decide the final risk score (see
+evidence_fusion).
+
+The model output is a MODEL SCORE learned from the historical labels.  Its
+scale reflects the training prevalence (see ``model_info``), so it is not a
+calibrated real-world probability of fraud.
 """
 
-import pandas as pd
-import numpy as np
-import joblib
-import os
+from typing import Any, Dict, Mapping, Optional, Tuple
 
-from .feature_builder import (
-    clean_claim_amounts,
-    create_age_groups,
-    add_hospital_memory_features,
-    add_patient_memory_features,
-    encode_categorical_features,
-    get_feature_columns
-)
-from .baseline_cost_model import build_cost_baseline, apply_cost_baseline
+import pandas as pd
+
+from .feature_builder import CONTRACT_VERSION, build_contract, flatten_contract
 from .model_loader import load_model
 from .risk_band_mapper import map_risk_band
-from .shap_explainer import get_top_risk_factors
+from .shap_explainer import explain_prediction, top_risk_factor_strings
 
-# Default model path
-DEFAULT_MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'fraud_test', 'models', 'xgboost_enhanced.pkl')
 
-def run_fraud_engine(claim_data, model_path=None, historical_df=None, encoders=None, baseline=None):
-    """
-    Main fraud prediction function
-    
-    Args:
-        claim_data: Dict with claim information matching input contract
-        model_path: Path to trained model (optional)
-        historical_df: Historical claims for feature calculation (required for full features)
-        encoders: Pre-fitted encoders (optional)
-        baseline: Pre-computed cost baseline (optional)
-    
-    Returns:
-        Dict with fraud_risk_score, risk_band, top_risk_factors
-    """
-    try:
-        # Convert input to DataFrame
-        df_input = pd.DataFrame([claim_data])
-        
-        # Rename fields to match expected column names
-        df_input.rename(columns={
-            'claim_amount': 'claimed_amount'
-        }, inplace=True)
-        
-        # Add metadata fields
-        metadata = claim_data.get('metadata', {})
-        for key, value in metadata.items():
-            df_input[key] = value
-        
-        # Ensure all required columns exist
-        required_cols = ['patient_age', 'hospital_id', 'diagnosis_code', 'billed_items_count', 
-                        'previous_claims_count', 'insurer_id', 'doc_missing_flag']
-        for col in required_cols:
-            if col not in df_input.columns:
-                df_input[col] = 0
-        
-        # Add placeholder columns that will be filled by feature engineering
-        df_input['is_fraud'] = 0  # Placeholder, not used for prediction
-        
-        # Clean claim amounts
-        df_input = clean_claim_amounts(df_input)
-        
-        # Create age groups
-        df_input = create_age_groups(df_input)
-        
-        # If historical data provided, use it for feature engineering
-        if historical_df is not None and len(historical_df) > 0:
-            # Combine historical with current claim
-            combined = pd.concat([historical_df, df_input], ignore_index=True)
-            
-            # Apply cost baseline if provided
-            if baseline is not None:
-                combined = apply_cost_baseline(combined, baseline)
-            
-            # Add hospital memory features
-            combined = add_hospital_memory_features(combined)
-            
-            # Add patient memory features
-            combined = add_patient_memory_features(combined)
-            
-            # Extract the current claim (last row)
-            df_input = combined.iloc[-1:].copy()
-            
-        else:
-            # No history - use default values
-            df_input['expected_cost'] = df_input['claimed_amount']
-            df_input['cost_deviation'] = 0
-            df_input['deviation_ratio'] = 1.0
-            df_input['hospital_claims_1yr'] = 0
-            df_input['hospital_fraud_count_1yr'] = 0
-            df_input['hospital_fraud_rate_1yr'] = 0.05  # Default 5%
-            df_input['hospital_avg_deviation'] = 0
-            df_input['patient_avg_amount'] = df_input['claimed_amount']
-            df_input['patient_avg_deviation'] = 0
-            df_input['patient_doc_missing_rate'] = df_input['doc_missing_flag'].fillna(0)
-        
-        # Encode categorical features
-        if encoders is not None:
-            df_input, _ = encode_categorical_features(df_input, encoders=encoders, fit=False)
-        else:
-            # Create temporary encoders (for single prediction)
-            df_input, _ = encode_categorical_features(df_input, fit=True)
-        
-        # Get feature columns in correct order
-        feature_cols = get_feature_columns()
-        
-        # Ensure all feature columns exist
-        for col in feature_cols:
-            if col not in df_input.columns:
-                df_input[col] = 0
-        
-        # Select features
-        X = df_input[feature_cols]
-        
-        # Load model
-        if model_path is None:
-            model_path = DEFAULT_MODEL_PATH
-        
-        model = load_model(model_path)
-        if model is None:
-            # Fallback to stub
-            return run_stub(claim_data)
-        
-        # Make prediction
-        fraud_probability = float(model.predict_proba(X)[0, 1])
-        
-        # Get risk factors
-        top_factors = get_top_risk_factors(df_input[feature_cols], model, feature_cols)
-        
-        # Determine risk band
-        risk_band = map_risk_band(fraud_probability)
-        
-        return {
-            "fraud_risk_score": fraud_probability,
-            "risk_band": risk_band,
-            "top_risk_factors": top_factors
-        }
-        
-    except Exception as e:
-        print(f"Error in fraud engine: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Fallback to stub on error
-        return run_stub(claim_data)
-
-def run_stub(claim_data):
-    """
-    Stub mode for testing - returns fixed output
-    
-    Args:
-        claim_data: dict with claim information (not used in stub)
-        
-    Returns:
-        dict with fixed fraud_risk_score, risk_band, top_risk_factors
-    """
+def model_info(bundle: Mapping[str, Any]) -> Dict[str, Any]:
+    """Provenance of the model behind a prediction (safe to expose)."""
+    info = bundle.get("training_info", {})
     return {
-        "fraud_risk_score": 0.15,
-        "risk_band": "low",
-        "top_risk_factors": ["Stub mode - model not loaded"]
+        "model_type": bundle.get("model_type"),
+        "contract_version": bundle.get("contract_version"),
+        "contract_version_matches": bundle.get("contract_version") == CONTRACT_VERSION,
+        "trained_at": info.get("trained_at"),
+        "training_rows": info.get("training_rows"),
+        "training_prevalence": info.get("training_prevalence"),
+        "features_without_training_data": info.get("features_without_training_data", []),
+        "probability_calibrated": False,
+        "limitations": info.get("limitations", []),
+    }
+
+
+def score_contract(
+    contract: Mapping[str, Mapping[str, Optional[float]]],
+    bundle: Mapping[str, Any],
+) -> Tuple[Dict[str, Any], pd.DataFrame]:
+    """
+    Run the model on a feature contract.
+
+    Returns (ml_result, feature_row).  ``feature_row`` is the exact one-row
+    matrix given to the model, so the SHAP explanation can be computed on it.
+    """
+    row = flatten_contract(contract, bundle["feature_names"])
+    probability = float(bundle["model"].predict_proba(row)[0, 1])
+    threshold = float(bundle["threshold"])
+    result = {
+        "available": True,
+        "fraud_probability": probability,
+        "predicted_class": int(probability >= threshold),
+        "threshold": threshold,
+        "model_info": model_info(bundle),
+    }
+    return result, row
+
+
+def unavailable(reason: str) -> Dict[str, Any]:
+    return {
+        "available": False,
+        "fraud_probability": None,
+        "predicted_class": None,
+        "reason": reason,
+    }
+
+
+def run_ml(
+    claim_data: Mapping[str, Any],
+    behavior_features: Optional[Mapping[str, Any]] = None,
+    anomaly_features: Optional[Mapping[str, Any]] = None,
+    network_features: Optional[Mapping[str, Any]] = None,
+    document_features: Optional[Mapping[str, Any]] = None,
+    model_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Contract -> ML prediction -> SHAP explanation.
+
+    Returns {"contract": ..., "ml": ..., "shap": ...}.  When the model cannot
+    be loaded, "ml" reports ``available: False`` and the claim features are
+    still returned so the other evidence remains usable.
+    """
+    bundle = load_model(model_path)
+    vocabulary = bundle["vocabulary"] if bundle else {}
+    contract = build_contract(
+        claim_data, vocabulary,
+        behavior_features, anomaly_features, network_features, document_features,
+    )
+    if bundle is None:
+        return {
+            "contract": contract,
+            "ml": unavailable("Trained model bundle could not be loaded."),
+            "shap": {"available": False, "reason": "No model available."},
+        }
+    try:
+        ml, row = score_contract(contract, bundle)
+    except Exception as exc:
+        return {
+            "contract": contract,
+            "ml": unavailable(f"Model inference failed: {exc}"),
+            "shap": {"available": False, "reason": "No prediction to explain."},
+        }
+    return {"contract": contract, "ml": ml, "shap": explain_prediction(bundle["model"], row)}
+
+
+def run_fraud_engine(claim_data: Mapping[str, Any], model_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Backward-compatible ML-only entry point (previous return shape).
+
+    Returns ``fraud_risk_score`` / ``risk_band`` / ``top_risk_factors``.  When
+    the model is unavailable the score is None - no placeholder probability is
+    invented.  The full pipeline (evidence fusion) is ``risk_engine.assess_claim``.
+    """
+    outcome = run_ml(claim_data, model_path=model_path)
+    ml = outcome["ml"]
+    if not ml["available"]:
+        return {
+            "fraud_risk_score": None,
+            "risk_band": "unknown",
+            "top_risk_factors": [ml["reason"]],
+        }
+    probability = ml["fraud_probability"]
+    return {
+        "fraud_risk_score": probability,
+        "risk_band": map_risk_band(probability),
+        "top_risk_factors": top_risk_factor_strings(outcome["shap"]),
     }

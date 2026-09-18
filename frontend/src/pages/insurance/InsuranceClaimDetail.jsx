@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
 import RiskScore from '../../components/RiskScore';
-import LIMEExplanation from '../../components/LIMEExplanation';
+import SHAPExplanation from '../../components/SHAPExplanation';
 import { 
   FiArrowLeft, 
   FiCalendar, 
@@ -40,7 +40,7 @@ export default function InsuranceClaimDetail() {
   const [showDecisionModal, setShowDecisionModal] = useState(false);
   const [decision, setDecision] = useState(null);
   const [decisionNotes, setDecisionNotes] = useState('');
-  const [limeFactors, setLimeFactors] = useState([]);
+  const [shap, setShap] = useState(null);
   const [similarClaims, setSimilarClaims] = useState([]);
 
   // Load claim data directly in useEffect - NO separate function
@@ -92,15 +92,8 @@ export default function InsuranceClaimDetail() {
         };
 
         setClaim(mapped);
-        // Try to map lime factors if provided
-        try {
-          const lime = data.lime_explanation || data.lime || null;
-          if (lime) {
-            setLimeFactors(Array.isArray(lime) ? lime : (lime.factors || []));
-          }
-        } catch (e) {
-          // ignore
-        }
+        // SHAP explanation of the ML prediction (null if the claim was never scored)
+        setShap(data.shap || null);
 
         setSimilarClaims([]);
       } catch (err) {
@@ -156,6 +149,7 @@ export default function InsuranceClaimDetail() {
           reviewHistory: data.status_history || [],
         };
         setClaim(mapped);
+        setShap(data.shap || null);
       } catch (err) {
         console.error('Failed to refresh claim:', err);
       } finally {
@@ -423,10 +417,10 @@ export default function InsuranceClaimDetail() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* LIME Explanation */}
+          {/* SHAP Explanation */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><FiBarChart2 /> Risk Factors</h2>
-            <LIMEExplanation factors={limeFactors} />
+            <SHAPExplanation shap={shap} />
           </div>
 
           {/* Assignment */}

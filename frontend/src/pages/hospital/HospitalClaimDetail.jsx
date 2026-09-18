@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import Button from '../../components/Button';
 import StatusBadge from '../../components/StatusBadge';
 import RiskScore from '../../components/RiskScore';
-import LIMEExplanation from '../../components/LIMEExplanation';
+import SHAPExplanation from '../../components/SHAPExplanation';
 import FileUploader from '../../components/FileUploader';
 import { 
   FiArrowLeft, 
@@ -34,7 +34,6 @@ export default function HospitalClaimDetail() {
   const [uploading, setUploading] = useState(false);
   const [notes, setNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
-  const [limeFactors, setLimeFactors] = useState([]);
 
   const loadClaim = useCallback(() => {
     // Mock data - replace with API call
@@ -82,28 +81,6 @@ export default function HospitalClaimDetail() {
       };
       
       setClaim(mockClaim);
-      
-      // Mock LIME factors
-      setLimeFactors([
-        { 
-          name: 'Claim Amount', 
-          impact: 42, 
-          color: 'high',
-          description: 'Amount exceeds typical range for this condition'
-        },
-        { 
-          name: 'Hospital Stay Duration', 
-          impact: 35, 
-          color: 'medium',
-          description: 'Stay duration is shorter than average'
-        },
-        { 
-          name: 'Patient Age', 
-          impact: 23, 
-          color: 'low',
-          description: 'Age within normal risk parameters'
-        }
-      ]);
       
       setLoading(false);
     }, 1000);
@@ -344,7 +321,7 @@ export default function HospitalClaimDetail() {
               <div className="flex justify-center mb-6">
                 <RiskScore score={claim.risk} />
               </div>
-              <LIMEExplanation factors={limeFactors} />
+              <SHAPExplanation shap={claim.shap || null} />
               
               {/* Priority Indicator */}
               {claim.priority === 'high' && (
