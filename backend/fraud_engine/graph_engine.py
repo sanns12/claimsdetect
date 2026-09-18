@@ -98,10 +98,32 @@ def analyze(claim: dict, historical_df: Optional[pd.DataFrame] = None) -> Dict[s
     if len(G) > 1:
         result["provider_network_density"] = float(nx.density(G))
 
-    # Evidence-only heuristic: unusual concentration/repetition, normalized to [0,1].
-    result["network_risk_score"] = float(min(
-        1.0,
-        0.5 * min(result["provider_patient_concentration"] * 10, 1.0)
-        + 0.5 * min(result["repeated_patient_doctor_hospital_count"] / 5.0, 1.0)
-    ))
+    # Evidence-only heuristic.
+    # With limited network history, avoid treating ordinary relationships
+    # as strong network evidence.
+    provider_total_claims = (
+        int((df[hcol].astype(str) == str(hospital)).sum())
+        if hcol and hospital is not None
+        else 0
+    )
+
+    triad_total = (
+        int(len(tuples))
+        if pcol and dcol and hcol
+        else 0
+    )
+
+    if provider_total_claims > 0 and triad_total > 0:
+        provider_concentration = result["provider_patient_concentration"]
+
+        repeated_ratio = min(
+            result["repeated_patient_doctor_hospital_count"] / triad_total,
+            1.0
+        )
+
+        result["network_risk_score"] = float(
+            (provider_concentration + repeated_ratio) / 2.0
+        )
+    else:
+        result["network_risk_score"] = 0.0
     return result

@@ -1,4 +1,8 @@
-from document_engine.config import Config
+"""
+Main entry point for Document Intelligence Engine
+"""
+
+from .config import Config
 from .document_stub import run_stub, fallback_stub
 
 # Initialize config and components
@@ -124,16 +128,7 @@ def run(claim_id: str, document_paths: list, claim_metadata: dict = None) -> dic
             
             result = {
                 "document_consistency_score": round(document_consistency_score, 2),
-                "mismatch_flags": mismatch_flags,
-                "ocr_confidence": round(avg_confidence, 2) if all_texts else 0.0,
-                "document_similarity": round(embedding_score, 2) if all_texts else 0.0,
-                "field_mismatch_score": round(
-                    min(len(mismatch_flags) / 5.0, 1.0),2
-                ) if mismatch_flags else 0.0,
-                "missing_information_indicator": 1.0 if (
-                    "no_document_data" in mismatch_flags
-                    or "ocr_failed" in mismatch_flags
-                ) else 0.0
+                "mismatch_flags": mismatch_flags
             }
         
         print(f"✅ Document Engine result: {result}")
