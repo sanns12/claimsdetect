@@ -2,18 +2,25 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Button from '../../components/Button';
 import FileUploader from '../../components/FileUploader';
-import { FiArrowLeft, FiCalendar, FiDollarSign, FiUser, FiActivity, FiFileText, FiAlertCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiCalendar, FiUser, FiActivity, FiFileText, FiAlertCircle } from 'react-icons/fi';
 import { submitClaim } from '../../services/claims';
 
 
 export default function UserSubmitClaim() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
+    patientId: '',
     fullName: '',
     age: '',
+    gender: '',
+    hospitalName: '',
+    doctorName: '',
+    insuranceProvider: '',
+    policyNumber: '',
     admissionDate: '',
     dischargeDate: '',
     disease: '',
+    procedure: '',
     amount: '',
   });
   
@@ -57,29 +64,76 @@ export default function UserSubmitClaim() {
 
   const validateStep1 = () => {
     const newErrors = {};
-    if (!formData.fullName) newErrors.fullName = 'Full name is required';
-    if (!formData.age) newErrors.age = 'Age is required';
-    else if (formData.age < 0 || formData.age > 120) newErrors.age = 'Please enter a valid age';
-    
+
+    if (!formData.patientId) {
+      newErrors.patientId = 'Patient ID is required';
+    }
+
+    if (!formData.fullName) {
+      newErrors.fullName = 'Full name is required';
+    }
+
+    if (!formData.age) {
+      newErrors.age = 'Age is required';
+    } else if (formData.age < 0 || formData.age > 120) {
+      newErrors.age = 'Please enter a valid age';
+    }
+
+    if (!formData.gender) {
+      newErrors.gender = 'Gender is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const validateStep2 = () => {
     const newErrors = {};
-    if (!formData.admissionDate) newErrors.admissionDate = 'Admission date is required';
-    if (!formData.dischargeDate) newErrors.dischargeDate = 'Discharge date is required';
-    if (!formData.disease || formData.disease === 'Select Disease') newErrors.disease = 'Please select a disease';
-    if (!formData.amount) newErrors.amount = 'Claim amount is required';
-    else if (formData.amount <= 0) newErrors.amount = 'Amount must be greater than 0';
-    
-    // Check if discharge date is after admission date
+
+    if (!formData.hospitalName) {
+      newErrors.hospitalName = 'Hospital name is required';
+    }
+
+    if (!formData.doctorName) {
+      newErrors.doctorName = 'Doctor name is required';
+    }
+
+    if (!formData.insuranceProvider) {
+      newErrors.insuranceProvider = 'Insurance provider is required';
+    }
+
+    if (!formData.policyNumber) {
+      newErrors.policyNumber = 'Policy number is required';
+    }
+
+    if (!formData.admissionDate) {
+      newErrors.admissionDate = 'Admission date is required';
+    }
+
+    if (!formData.dischargeDate) {
+      newErrors.dischargeDate = 'Discharge date is required';
+    }
+
+    if (!formData.disease || formData.disease === 'Select Disease') {
+      newErrors.disease = 'Please select a disease';
+    }
+
+    if (!formData.procedure) {
+      newErrors.procedure = 'Procedure is required';
+    }
+
+    if (!formData.amount) {
+      newErrors.amount = 'Claim amount is required';
+    } else if (formData.amount <= 0) {
+      newErrors.amount = 'Amount must be greater than 0';
+    }
+
     if (formData.admissionDate && formData.dischargeDate) {
       if (new Date(formData.dischargeDate) < new Date(formData.admissionDate)) {
         newErrors.dischargeDate = 'Discharge date must be after admission date';
       }
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -103,21 +157,31 @@ export default function UserSubmitClaim() {
   const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (currentStep === 3) {
-    setIsSubmitting(true);
-    setSubmitError('');
+    if (currentStep === 3) {
 
+  if (files.length === 0) {
+    setSubmitError('Please upload at least one supporting document.');
+    return;
+  }
+
+  setIsSubmitting(true);
+  setSubmitError('');
     try {
       const claimData = {
-        age: parseInt(formData.age),
-        disease: formData.disease,
-        admission_date: formData.admissionDate,
-        discharge_date: formData.dischargeDate,
-        claim_amount: parseFloat(formData.amount),
-        patient_name: formData.fullName,
-        hospital_name: 'City General Hospital',
-        gender: "M" // or add gender field later properly
-      };
+      patient_id: formData.patientId,
+      patient_name: formData.fullName,
+      age: parseInt(formData.age),
+      gender: formData.gender,
+      hospital_name: formData.hospitalName,
+      doctor_name: formData.doctorName,
+      insurance_provider: formData.insuranceProvider,
+      policy_number: formData.policyNumber,
+      disease: formData.disease,
+      procedure: formData.procedure,
+      admission_date: formData.admissionDate,
+      discharge_date: formData.dischargeDate,
+      claim_amount: parseFloat(formData.amount),
+    };
 
       const result = await submitClaim(claimData, files[0]);
 
@@ -202,7 +266,7 @@ export default function UserSubmitClaim() {
       {/* Main Form */}
       <main className="p-6">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-          {/* Step 1: Personal Information */}
+         {/* Step 1: Personal Information */}
           {currentStep === 1 && (
             <div className="space-y-6">
               <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
@@ -210,8 +274,29 @@ export default function UserSubmitClaim() {
                   <FiUser className="text-blue-500" />
                   Personal Information
                 </h2>
-                
+
+                {/* Replace the grid here */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                  {/* Patient ID */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Patient ID</label>
+                    <input
+                      type="text"
+                      name="patientId"
+                      value={formData.patientId}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.patientId ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter patient ID"
+                    />
+                    {errors.patientId && (
+                      <p className="text-red-500 text-xs mt-1">{errors.patientId}</p>
+                    )}
+                  </div>
+
+                  {/* Full Name */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Full Name</label>
                     <input
@@ -229,6 +314,7 @@ export default function UserSubmitClaim() {
                     )}
                   </div>
 
+                  {/* Age */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Age</label>
                     <input
@@ -247,19 +333,38 @@ export default function UserSubmitClaim() {
                       <p className="text-red-500 text-xs mt-1">{errors.age}</p>
                     )}
                   </div>
+
+                  {/* Gender */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Gender</label>
+                    <select
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.gender ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {errors.gender && (
+                      <p className="text-red-500 text-xs mt-1">{errors.gender}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div className="flex justify-end">
-                <Button 
-                  type="button" 
-                  onClick={nextStep}
-                >
+                <Button type="button" onClick={nextStep}>
                   Next Step →
                 </Button>
               </div>
             </div>
           )}
+
 
           {/* Step 2: Claim Details */}
           {currentStep === 2 && (
@@ -269,8 +374,85 @@ export default function UserSubmitClaim() {
                   <FiActivity className="text-blue-500" />
                   Claim Details
                 </h2>
-                
+
+                {/* New Hospital/Doctor/Insurance/Policy section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  {/* Hospital / Provider */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Hospital / Provider</label>
+                    <input
+                      type="text"
+                      name="hospitalName"
+                      value={formData.hospitalName}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.hospitalName ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter hospital name"
+                    />
+                    {errors.hospitalName && (
+                      <p className="text-red-500 text-xs mt-1">{errors.hospitalName}</p>
+                    )}
+                  </div>
+
+                  {/* Doctor */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Doctor Name</label>
+                    <input
+                      type="text"
+                      name="doctorName"
+                      value={formData.doctorName}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.doctorName ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter doctor name"
+                    />
+                    {errors.doctorName && (
+                      <p className="text-red-500 text-xs mt-1">{errors.doctorName}</p>
+                    )}
+                  </div>
+
+                  {/* Insurance Provider */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Insurance Provider</label>
+                    <input
+                      type="text"
+                      name="insuranceProvider"
+                      value={formData.insuranceProvider}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.insuranceProvider ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter insurance provider"
+                    />
+                    {errors.insuranceProvider && (
+                      <p className="text-red-500 text-xs mt-1">{errors.insuranceProvider}</p>
+                    )}
+                  </div>
+
+                  {/* Policy Number */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Policy Number</label>
+                    <input
+                      type="text"
+                      name="policyNumber"
+                      value={formData.policyNumber}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.policyNumber ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter policy number"
+                    />
+                    {errors.policyNumber && (
+                      <p className="text-red-500 text-xs mt-1">{errors.policyNumber}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Existing grid with Admission, Discharge, Disease, Procedure, Claim Amount */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Admission Date */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Admission Date</label>
                     <div className="relative">
@@ -290,6 +472,7 @@ export default function UserSubmitClaim() {
                     )}
                   </div>
 
+                  {/* Discharge Date */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Discharge Date</label>
                     <div className="relative">
@@ -309,6 +492,7 @@ export default function UserSubmitClaim() {
                     )}
                   </div>
 
+                  {/* Disease/Condition */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Disease/Condition</label>
                     <select
@@ -328,10 +512,31 @@ export default function UserSubmitClaim() {
                     )}
                   </div>
 
+                  {/* Procedure */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">Claim Amount ($)</label>
+                    <label className="block text-sm font-medium mb-2">Procedure</label>
+                    <input
+                      type="text"
+                      name="procedure"
+                      value={formData.procedure}
+                      onChange={handleChange}
+                      className={`w-full bg-gray-900 border rounded-lg py-3 px-4 focus:outline-none focus:border-blue-500 ${
+                        errors.procedure ? 'border-red-500' : 'border-gray-700'
+                      }`}
+                      placeholder="Enter procedure / treatment"
+                    />
+                    {errors.procedure && (
+                      <p className="text-red-500 text-xs mt-1">{errors.procedure}</p>
+                    )}
+                  </div>
+
+                  {/* Claim Amount */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Claim Amount (₹)</label>
                     <div className="relative">
-                      <FiDollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        ₹
+                      </span>
                       <input
                         type="number"
                         name="amount"
@@ -365,16 +570,13 @@ export default function UserSubmitClaim() {
                 <Button type="button" variant="secondary" onClick={prevStep}>
                   ← Previous
                 </Button>
-                <Button 
-                  type="button" 
-                  onClick={nextStep}
-                  
-                >
+                <Button type="button" onClick={nextStep}>
                   Next Step →
                 </Button>
               </div>
             </div>
           )}
+
 
           {/* Step 3: Document Upload & ML Review */}
           {currentStep === 3 && (

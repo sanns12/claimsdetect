@@ -101,16 +101,23 @@ async def get_claim(
 
 @router.post("/submit")
 async def submit_claim(
+    patient_id: str = Form(...),
     patient_name: str = Form(...),
     age: int = Form(...),
+    gender: str = Form(...),
     disease: str = Form(...),
+    procedure: str = Form(...),
     admission_date: str = Form(...),
     discharge_date: str = Form(...),
     claim_amount: float = Form(...),
     hospital_name: str = Form(...),
+    doctor_name: str = Form(...),
+    insurance_provider: str = Form(...),
+    policy_number: str = Form(...),
     supporting_file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
+    
     """Submit a new claim with document"""
     
     print(f"📝 Submitting claim for patient: {patient_name}")
@@ -206,31 +213,52 @@ async def submit_claim(
             "id": f"CLM{len(MOCK_CLAIMS)+1:03d}",
             "claim_id": f"CLM{len(MOCK_CLAIMS)+1:03d}",
             "claimId": f"CLM{len(MOCK_CLAIMS)+1:03d}",
-            "amount": claim_amount,
-            "claim_amount": claim_amount,
-            "claimAmount": claim_amount,
+
+            # Raw claim data
+            "patient_id": patient_id,
+            "patient_name": patient_name,
+            "patientName": patient_name,
             "age": age,
+            "gender": gender,
+
+            "hospital_name": hospital_name,
+            "hospitalName": hospital_name,
+            "doctor_name": doctor_name,
+            "doctorName": doctor_name,
+
+            "insurance_provider": insurance_provider,
+            "insuranceProvider": insurance_provider,
+            "policy_number": policy_number,
+            "policyNumber": policy_number,
+
             "disease": disease,
+            "procedure": procedure,
+
             "admission_date": admission_date,
             "discharge_date": discharge_date,
             "admissionDate": admission_date,
             "dischargeDate": discharge_date,
+
+            "amount": claim_amount,
+            "claim_amount": claim_amount,
+            "claimAmount": claim_amount,
+
+            # Existing status/risk fields
             "status": status,
             "submitted_at": datetime.now().isoformat(),
             "last_updated": datetime.now().isoformat(),
             "submittedAt": datetime.now().isoformat(),
             "lastUpdated": datetime.now().isoformat(),
             "date": datetime.now().strftime("%Y-%m-%d"),
-            "policy_id": "POL-DEFAULT",
-            "policyId": "POL-DEFAULT",
+
+            "policy_id": policy_number,
+            "policyId": policy_number,
+
             "fraud_score": fraud_score,
             "document_score": document_score,
             "fraudScore": fraud_score,
             "documentScore": document_score,
-            "patient_name": patient_name,
-            "hospital_name": hospital_name,
-            "patientName": patient_name,
-            "hospitalName": hospital_name,
+
             "message": message,
             "file_name": supporting_file.filename,
             "fileName": supporting_file.filename,
@@ -239,7 +267,6 @@ async def submit_claim(
             "risk": risk_score,
             "extracted_text_preview": extracted_text[:500] if extracted_text else ""
         }
-        
         # Add to mock claims for testing
         MOCK_CLAIMS.append(new_claim)
         

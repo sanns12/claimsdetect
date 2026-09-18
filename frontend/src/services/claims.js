@@ -22,6 +22,7 @@ export const getClaimById = async (claimId) => {
 
 // Submit a new claim with documents
 // Submit a new claim with documents (OCR ENABLED)
+// Submit a new claim with documents
 export const submitClaim = async (claimData, file) => {
   if (!file) {
     throw { message: "Supporting document is required." };
@@ -29,13 +30,19 @@ export const submitClaim = async (claimData, file) => {
 
   const formData = new FormData();
 
+  formData.append("patient_id", claimData.patient_id);
   formData.append("patient_name", claimData.patient_name);
   formData.append("age", claimData.age);
+  formData.append("gender", claimData.gender);
   formData.append("disease", claimData.disease);
+  formData.append("procedure", claimData.procedure);
   formData.append("admission_date", claimData.admission_date);
   formData.append("discharge_date", claimData.discharge_date);
   formData.append("claim_amount", claimData.claim_amount);
   formData.append("hospital_name", claimData.hospital_name);
+  formData.append("doctor_name", claimData.doctor_name);
+  formData.append("insurance_provider", claimData.insurance_provider);
+  formData.append("policy_number", claimData.policy_number);
   formData.append("supporting_file", file);
 
   const response = await API.post("/claims/submit", formData);
