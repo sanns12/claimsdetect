@@ -13,7 +13,8 @@
 *.gz
 *.7z
 *.rar
-
+__pycache__/
+*.py[cod]
 # 📁 Data folders - IGNORE COMPLETELY
 **/data/
 **/datasets/
